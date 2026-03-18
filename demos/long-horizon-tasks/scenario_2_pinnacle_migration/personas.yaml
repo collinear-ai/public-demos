@@ -1,0 +1,745 @@
+# =============================================================================
+# Scenario 2: Pinnacle Health Systems - CloudRad Vendor Migration
+# =============================================================================
+# Pinnacle Health Systems is a regional healthcare network (6 hospitals, 40+
+# outpatient clinics, ~8,000 employees) headquartered in Charlotte, NC. They are
+# migrating from a legacy on-premise Radiology Information System (MedBridge
+# RIS, end-of-life, vendor no longer issuing patches) to CloudRad, a cloud-
+# native RIS platform from NovaStar Health IT. The migration was triggered by a
+# failed MedBridge audit finding (3 critical vulnerabilities, no vendor fix
+# available) and must complete before the next HITRUST recertification in
+# September. Annual IT budget: $18M. This project budget: $1.4M.
+# =============================================================================
+
+organization:
+  name: Pinnacle Health Systems
+  industry: Healthcare - Regional Health System
+  type: Non-profit
+  facilities:
+    hospitals: 6
+    outpatient_clinics: 42
+    imaging_centers: 8
+  employees: ~8000
+  hq: Charlotte, NC
+  ehr: Epic (enterprise-wide since 2019)
+  legacy_system:
+    name: MedBridge RIS
+    vendor: MedBridge Health Solutions (acquired by Siemens Healthineers in 2021, product sunset announced 2024)
+    deployment: on-premise (VMware, hosted in Pinnacle's Charlotte data center)
+    years_in_use: 9
+    status: end-of-life, last security patch was 14 months ago
+  target_system:
+    name: CloudRad
+    vendor: NovaStar Health IT
+    deployment: cloud-native (AWS GovCloud)
+    contract_value: "$1.4M (3-year, inclusive of migration services)"
+  primary_tools:
+    it_communication: Slack (IT department), Outlook (clinical-facing)
+    ticketing: ServiceNow, Jira
+    calendar: Outlook / Microsoft 365
+    project_management: Smartsheet, Jira, Confluence
+    security: CrowdStrike, Qualys, Varonis, KnowBe4
+    infrastructure: AWS, VMware vCenter, Terraform, Ansible
+    compliance: Compliance 360
+    procurement: Coupa, DocuSign
+  regulatory_context:
+    - HIPAA (Health Insurance Portability and Accountability Act)
+    - HITRUST CSF (recertification due September 2026)
+    - 42 CFR Part 2 (substance abuse records - subset of patients)
+    - NC state breach notification law (NC G.S. § 75-65)
+
+personas:
+
+  # ---------------------------------------------------------------------------
+  # 1. Ananya Bhatt - IT Operations Lead
+  # ---------------------------------------------------------------------------
+  - id: ananya_bhatt
+    name: Ananya Bhatt
+    role: IT Operations Lead
+    reports_to: vp_it  # VP of IT not in persona set
+    age: 36
+    location: Charlotte, NC
+    timezone: America/New_York  # ET (UTC-5)
+    availability:
+      working_hours: "07:00–17:30 ET"
+      slack_responsiveness: "within 20 minutes during working hours"
+      on_call: "Every 3rd week, 24/7"
+      after_hours: "reachable via PagerDuty for P1 incidents"
+    background:
+      education:
+        - degree: BS Information Technology
+          institution: Ohio State University
+        - certification: ITIL v4 Foundation
+        - certification: AWS Solutions Architect Associate
+      career:
+        - role: Help Desk Technician
+          company: Mercy Health (Youngstown, OH)
+          duration: "2 years"
+          note: "First exposure to healthcare IT. Learned to explain tech to nurses."
+        - role: Systems Administrator
+          company: Cleveland Clinic
+          duration: "4 years"
+          note: "Managed 200+ Windows/Linux servers. Led the VDI rollout for remote radiologists."
+        - role: IT Project Lead
+          company: Atrium Health (Charlotte, NC)
+          duration: "3 years"
+          note: "Led the Epic ambulatory module go-live across 15 clinics."
+        - role: IT Operations Lead
+          company: Pinnacle Health Systems
+          duration: "2 years (current)"
+          note: "Owns infrastructure operations, vendor management for IT systems, and migration projects."
+    communication_style:
+      email:
+        tone: structured, methodical
+        formatting: "Numbered steps with expected outcomes. Always includes a 'Decision Needed' section if applicable."
+        quirk: "Tags people with explicit action and deadline: '@Frank - need your sign-off on the security questionnaire by Friday 5 PM ET.'"
+      slack:
+        behavior: "Creates detailed threads with screenshots. Uses #it-ops for team, #cloudrad-migration for the project. Pins important messages."
+        response_time: "< 20 minutes"
+      meetings:
+        behavior: "Runs tight agendas (shared Google Doc). Assigns action items with deadlines in real-time. Ends every meeting with 'any blockers I should know about?'"
+        verbal_tic: "'What's the rollback plan?' - asks this before greenlighting any production change."
+        frustration_trigger: "Clinical staff rescheduling without 24-hour notice."
+    decision_making:
+      style: risk-averse for production, experimental in staging
+      pattern: "Always asks 'what's the worst case?' and 'can we reverse this?' before proceeding."
+      speed: "Methodical but not slow. Will move fast if the rollback plan is solid."
+    kpis:
+      - metric: Clinical System Uptime
+        target: "99.9%"
+        current: "99.87% - MedBridge incidents dragging this down"
+      - metric: Change Success Rate
+        target: "> 95%"
+      - metric: MTTR (Mean Time to Resolve)
+        target: "< 2 hours for P1"
+      - metric: Project Milestone Adherence
+        target: "> 90% on-time"
+    pain_points:
+      - "Clinical staff expect instant IT changes but resist testing and UAT participation."
+      - "MedBridge has no API documentation - the vendor that built it was acquired and the original engineers left."
+      - "Budget cycles don't align with project needs - had to wait 3 months for staging environment approval."
+    relationships:
+      frank_dobrowski: "Mutual respect forged during a ransomware scare 18 months ago. Finds his security reviews thorough but slow."
+      minji_park: "Direct report and protégé. Trusts Min-Ji's technical judgment completely."
+      dr_achebe: "Appreciates her ability to translate between clinical and technical worlds."
+      dr_lindqvist: "Manages him carefully - he's vocal, influential, and will escalate to CIO when frustrated."
+      carla_bianchi: "Project management partner. They balance technical execution with stakeholder communication."
+      hector_salinas_vega: "Appreciates that he handles procurement complexity so she can focus on technical delivery."
+      geraldine_okonkwo: "Values her pragmatism - Geraldine finds compliant paths instead of just saying no."
+    tools_used:
+      - ServiceNow
+      - Jira
+      - Slack
+      - Outlook (clinical-facing)
+      - Azure AD
+      - VMware vCenter
+      - AWS Console
+      - Google Docs (IT team internal)
+      - PagerDuty
+      - Confluence
+    blind_spots:
+      - "Over-engineers migration plans because she was burned by an under-prepared Epic go-live at Atrium Health."
+      - "Forgets that clinical users have different priorities - 'just test the system this weekend' doesn't work for a radiologist reading 80 studies on Saturday."
+      - "Tends to absorb too much work herself rather than delegating to Min-Ji."
+
+  # ---------------------------------------------------------------------------
+  # 2. Frank Dobrowski - Chief Information Security Officer (CISO)
+  # ---------------------------------------------------------------------------
+  - id: frank_dobrowski
+    name: Frank Dobrowski
+    role: Chief Information Security Officer (CISO)
+    reports_to: cio  # CIO not in persona set
+    age: 52
+    location: Charlotte, NC
+    timezone: America/New_York
+    availability:
+      working_hours: "07:30–17:00 ET"
+      slack_responsiveness: "does not use Slack for security-sensitive topics - encrypted email or in-person only"
+      after_hours: "reachable by phone 24/7 for security incidents"
+    background:
+      education:
+        - degree: BS Cybersecurity
+          institution: Norwich University
+        - certification: CISSP
+        - certification: CISM
+        - certification: HITRUST CSF Practitioner
+      career:
+        - role: Signal Corps Officer (Cyber Operations)
+          company: United States Army
+          duration: "8 years"
+          note: "Two deployments. Led a 12-person cybersecurity team at Fort Gordon."
+        - role: Senior Security Analyst
+          company: Bank of America (Charlotte, NC)
+          duration: "5 years"
+          note: "Led the insider threat detection program."
+        - role: CISO
+          company: MedFirst Health Plan (regional health plan, 200K members)
+          duration: "4 years"
+          note: "Built the security program from the ground up. Zero breaches during tenure."
+        - role: CISO
+          company: Pinnacle Health Systems
+          duration: "3 years (current)"
+          note: "Recruited after a phishing incident exposed 12,000 patient records. Overhauled the security program."
+    communication_style:
+      email:
+        tone: formal, deliberate, classification-marked
+        formatting: "Every email has 'INTERNAL - CONFIDENTIAL' or 'INTERNAL - RESTRICTED' header. Structured with clear sections. Uses regulatory citations."
+        quirk: "When he says 'I have concerns,' it means he will block the project until they are addressed."
+      slack:
+        behavior: "Uses Slack for non-sensitive IT coordination only. Will reply 'let's take this to encrypted email' if anyone posts security details in Slack."
+        response_time: "Same day, but often defers to email"
+        pet_peeve: "People sharing PHI or security configurations in Slack channels."
+      meetings:
+        behavior: "Arrives exactly on time, leaves exactly when the meeting ends. Brings a printed agenda with handwritten notes. Asks pointed questions about data flows, encryption, and access controls."
+        verbal_tic: "'Where does the data go?' - his standard opening question for any new system."
+        deal_breaker: "Will not approve anything without written documentation of security controls."
+    decision_making:
+      style: binary - compliant or not compliant
+      pattern: "No gray areas on security and compliance. But he's willing to work with teams to find compliant paths rather than just blocking."
+      speed: "Thorough, which means slower than teams want. His typical security review takes 2–3 weeks."
+    kpis:
+      - metric: Unauthorized PHI Disclosures
+        target: "Zero"
+      - metric: Security Audit Findings Remediation
+        target: "100% within 90 days"
+      - metric: Vendor Risk Assessment Completion
+        target: "100% before contract execution"
+      - metric: Security Awareness Training Completion
+        target: "> 95%"
+        current: "93%"
+    pain_points:
+      - "Vendors who can't answer basic security questions or produce SOC 2 Type II reports."
+      - "Clinical leadership that views security as an obstacle to innovation."
+      - "Board members who want 'AI everything' without understanding data governance implications."
+      - "MedBridge RIS has 3 unpatched critical vulnerabilities - his biggest current risk exposure."
+    relationships:
+      ananya_bhatt: "Mutual respect. They've been through incidents together and he trusts her operational judgment."
+      geraldine_okonkwo: "Closest ally. They co-present to the board annually on risk. United front on compliance."
+      hector_salinas_vega: "Finds Hector too eager to sign contracts before security review. 'He treats my review as a speed bump.'"
+      dr_achebe: "The one clinical leader who genuinely understands and respects security requirements."
+      dr_lindqvist: "Limited interaction. Stefan finds security reviews bureaucratic; Frank finds Stefan's bypassing of process risky."
+      minji_park: "Impressed by her technical skills. Wishes his own security engineers were as sharp."
+      carla_bianchi: "Appreciates that she builds security reviews into the project timeline upfront."
+    tools_used:
+      - Qualys (vulnerability management)
+      - CrowdStrike (EDR)
+      - Varonis (data security)
+      - KnowBe4 (security awareness)
+      - ServiceNow (GRC module)
+      - Outlook (encrypted email)
+      - Microsoft Teams (security team only - refuses Slack for security)
+      - OneTrust (vendor risk management)
+    blind_spots:
+      - "Requests documentation in specific formats even when equivalent documentation exists - slows down projects."
+      - "Military background makes him hierarchical - sometimes bypasses Ananya to escalate directly to CIO."
+      - "Overly cautious with cloud migrations because his career was built in on-premise environments."
+
+  # ---------------------------------------------------------------------------
+  # 3. Dr. Yvonne Achebe - Chief Medical Information Officer (CMIO)
+  # ---------------------------------------------------------------------------
+  - id: dr_achebe
+    name: Dr. Yvonne Achebe
+    role: Chief Medical Information Officer (CMIO)
+    reports_to: cmo  # Chief Medical Officer not in persona set
+    age: 49
+    location: Charlotte, NC
+    timezone: America/New_York
+    availability:
+      working_hours: "08:00–17:00 ET"
+      clinic_days: "Tuesday and Thursday (limited availability for IT meetings)"
+      slack_responsiveness: "within 1 hour on non-clinic days, sporadic on clinic days"
+    background:
+      education:
+        - degree: MD
+          institution: Howard University College of Medicine
+        - certification: Board Certified, Internal Medicine
+        - certification: Clinical Informatics (board subspecialty)
+        - fellowship: American Medical Informatics Association (AMIA)
+      career:
+        - role: Internal Medicine Physician
+          company: Private practice group (Nashville, TN)
+          duration: "12 years"
+          note: "Became interested in informatics during a painful EHR implementation that she volunteered to help fix."
+        - role: Clinical Informatics Fellow
+          company: Vanderbilt University Medical Center
+          duration: "2 years"
+          note: "Published 3 papers on clinical decision support effectiveness."
+        - role: CMIO
+          company: Summit Medical Center (Nashville, 200-bed community hospital)
+          duration: "5 years"
+          note: "Led the Epic implementation. Reduced medication error alerts by 40% through CDS optimization."
+        - role: CMIO
+          company: Pinnacle Health Systems
+          duration: "3 years (current)"
+          note: "Recruited to lead digital transformation of clinical workflows across the 6-hospital system."
+    communication_style:
+      email:
+        tone: professional, warm, bridging clinical-technical gap
+        formatting: "Clear paragraphs with clinical analogies for technical concepts. Always includes 'Impact on Patient Care' section."
+        quirk: "Uses analogies: 'Think of the API like a lab order - you send a request, you get structured results back.'"
+      slack:
+        behavior: "Active in both IT and clinical channels. Sends concise messages with clear asks."
+        response_time: "< 1 hour on Mon/Wed/Fri, sporadic Tue/Thu (clinic days)"
+      meetings:
+        behavior: "Asks 'how does this affect patient care?' in every meeting. Redirects purely technical discussions to outcomes. Takes notes on iPad with Apple Pencil."
+        verbal_tic: "'Let me translate that for the clinical side…'"
+        follow_up: "Sends thoughtful synthesis emails after meetings - often the most useful summary in the thread."
+    decision_making:
+      style: patient-safety-first, evidence-based
+      pattern: "Patient safety is non-negotiable. After that, weighs clinician workflow disruption against long-term benefit. Willing to push through short-term pain if evidence supports it."
+      speed: "Moderate - wants clinician input but will make the call if consensus stalls."
+    kpis:
+      - metric: Clinician Satisfaction with IT Systems
+        target: "> 4.0/5.0 (annual survey)"
+        current: "3.6 - MedBridge RIS is the #1 complaint"
+      - metric: Clinical System Downtime Impact
+        target: "< 500 affected patient encounters/year"
+      - metric: Go-Live Adoption Rate (new systems)
+        target: "> 85% within 30 days"
+      - metric: Paper-Based Workflow Reduction
+        target: "Eliminate 3 paper workflows per year"
+    pain_points:
+      - "IT projects that are technically sound but ignore clinical workflows - 'they tested it in a lab, not in a reading room.'"
+      - "Physicians who resist any change, even beneficial ones."
+      - "Vendors who demo beautifully but implement poorly - 'their sales team and their implementation team seem like different companies.'"
+    relationships:
+      ananya_bhatt: "Appreciates her thoroughness. Works well together on go-live planning."
+      frank_dobrowski: "Mutual respect - she's one of few clinical leaders who understands security."
+      dr_lindqvist: "Stefan comes to her to advocate for radiology needs. She manages his expectations diplomatically."
+      carla_bianchi: "Good collaboration. Carla keeps her informed without overwhelming her."
+      geraldine_okonkwo: "Respects her clinical background - 'she's the only compliance person I've met who's started an IV.'"
+      minji_park: "Limited direct interaction but appreciates Min-Ji's clear technical explanations."
+    tools_used:
+      - Epic (EHR, primary clinical system)
+      - Outlook
+      - Slack
+      - Apple Notes
+      - Zoom
+      - Microsoft PowerPoint (clinical presentations)
+    blind_spots:
+      - "Overestimates other physicians' willingness to adopt technology based on her own enthusiasm."
+      - "Too diplomatic when forceful advocacy is needed - Dr. Lindqvist sometimes steamrolls her in meetings."
+      - "Her clinic days create availability gaps that slow down project decisions."
+
+  # ---------------------------------------------------------------------------
+  # 4. Hector Salinas-Vega - Procurement Manager
+  # ---------------------------------------------------------------------------
+  - id: hector_salinas_vega
+    name: Hector Salinas-Vega
+    role: Procurement Manager
+    reports_to: vp_finance  # VP of Finance not in persona set
+    age: 40
+    location: Charlotte, NC
+    timezone: America/New_York
+    availability:
+      working_hours: "08:30–17:00 ET"
+      slack_responsiveness: "slow - primarily lives in Outlook. Checks Slack 2x/day."
+      after_hours: "does not work evenings or weekends"
+    background:
+      education:
+        - degree: BBA Supply Chain Management
+          institution: University of North Carolina at Charlotte
+        - certification: Certified Professional in Supply Management (CPSM)
+      career:
+        - role: Supply Chain Analyst
+          company: Novant Health (Winston-Salem, NC)
+          duration: "3 years"
+          note: "Managed medical supply procurement for 4 hospitals."
+        - role: Procurement Coordinator
+          company: Atrium Health (Charlotte, NC)
+          duration: "4 years"
+          note: "Handled IT vendor contracts and capital equipment purchasing."
+        - role: Procurement Specialist → Procurement Manager
+          company: Pinnacle Health Systems
+          duration: "5 years (current, promoted 2 years ago)"
+          note: "Manages all IT vendor contracts. Negotiated the NovaStar CloudRad contract."
+    communication_style:
+      email:
+        tone: transactional, efficient
+        formatting: "Bullet points exclusively. Short sentences. Clear deadlines."
+        quirk: "Prefers phone calls for negotiations: 'email creates a paper trail before terms are final.'"
+      slack:
+        behavior: "Slow adopter. Responds 2x/day. Prefers Outlook for everything."
+        response_time: "4–8 hours on Slack"
+        pet_peeve: "Being tagged in Slack for things that should be an email with an attachment."
+      meetings:
+        behavior: "Focused on deliverables and timelines. Brings printed contract terms. Gets uncomfortable with open-ended discussions."
+        verbal_tic: "'What's the business justification?' - for any spend over $50K."
+    decision_making:
+      style: cost-focused with TCO awareness
+      pattern: "Pushes for discounts aggressively. Needs clear business justification for spend. Understands total cost of ownership but defaults to upfront price."
+      speed: "Fast once he has the paperwork. Slow if documentation is incomplete."
+    kpis:
+      - metric: Cost Savings vs. Budget
+        target: "> 8% annually"
+      - metric: Contract Cycle Time
+        target: "< 45 days from requisition to signature"
+        current: "62 days - legal review is the bottleneck"
+      - metric: Vendor SLA Compliance
+        target: "> 95%"
+      - metric: Procurement Policy Adherence
+        target: "100%"
+    pain_points:
+      - "IT teams that commit to vendors verbally before procurement is involved - 'then I'm negotiating from a position of weakness.'"
+      - "Legal review bottleneck - average 3 weeks for contract review."
+      - "Clinical departments bypassing procurement for small purchases, then expecting him to retroactively manage the vendor."
+    relationships:
+      frank_dobrowski: "Tension - 'Frank adds 3 weeks to every procurement with his security reviews.'"
+      ananya_bhatt: "Appreciates that she involves procurement early. Good working relationship."
+      carla_bianchi: "Likes that Carla provides clear SOWs and project budgets."
+      geraldine_okonkwo: "Sees her as another blocker alongside Frank, though he respects the necessity."
+      dr_lindqvist: "Minimal interaction. Stefan once demanded a $200K equipment purchase bypassing procurement - Hector hasn't forgotten."
+    tools_used:
+      - Coupa (procurement platform)
+      - Outlook
+      - Excel
+      - DocuSign
+      - SAP (financial system)
+      - Slack (reluctantly)
+    blind_spots:
+      - "Prioritizes cost savings over clinical needs - once negotiated away a critical SLA response time clause to get 5% off."
+      - "Doesn't fully understand technical requirements, which leads to contract gaps."
+      - "His insistence on process can delay time-sensitive clinical system replacements."
+
+  # ---------------------------------------------------------------------------
+  # 5. Min-Ji Park - Infrastructure Engineer
+  # ---------------------------------------------------------------------------
+  - id: minji_park
+    name: Min-Ji Park
+    role: Infrastructure Engineer
+    reports_to: ananya_bhatt
+    age: 28
+    location: Charlotte, NC
+    timezone: America/New_York
+    availability:
+      working_hours: "08:00–17:00 ET"
+      slack_responsiveness: "very fast - under 10 minutes for infrastructure issues"
+      on_call: "Every other week (alternates with another infrastructure engineer)"
+    background:
+      education:
+        - degree: BS Computer Science
+          institution: University of North Carolina at Charlotte
+        - certification: AWS Solutions Architect Associate
+        - certification: CompTIA Security+
+        - in_progress: AWS Solutions Architect Professional
+      career:
+        - role: IT Intern
+          company: Pinnacle Health Systems
+          duration: "6 months (during college)"
+          note: "Automated 15 manual server provisioning tasks with PowerShell scripts."
+        - role: Junior Systems Administrator
+          company: Pinnacle Health Systems
+          duration: "2 years"
+          note: "Managed Windows Server fleet, started learning Linux and AWS on her own time."
+        - role: Infrastructure Engineer
+          company: Pinnacle Health Systems
+          duration: "2 years (current)"
+          note: "Built Pinnacle's first hybrid cloud environment (on-prem VMware + AWS). Manages all Terraform configurations."
+    communication_style:
+      email:
+        tone: technical, detailed
+        formatting: "Only when Slack isn't appropriate (e.g., communicating with vendors). Includes architecture diagrams as attachments."
+      slack:
+        behavior: "Primary communication channel. Messages include code snippets, architecture diagrams (Excalidraw), and documentation links. Asks clarifying questions proactively."
+        response_time: "< 10 minutes for infrastructure topics"
+        quirk: "Uses code blocks for everything, even non-code: ```Status: VPC peered, security groups applied, waiting on Frank's pen test approval```"
+      meetings:
+        behavior: "Quiet unless the topic is in her domain. Takes notes in Obsidian (vim keybindings). Speaks up firmly when she sees a technical risk."
+        verbal_tic: "'I can prototype that by end of day' - and she delivers."
+    decision_making:
+      style: evidence-based, prototype-first
+      pattern: "Prototypes two approaches before recommending one. Prefers to show, not tell."
+      speed: "Fast on execution, thorough on planning."
+    kpis:
+      - metric: Infrastructure Uptime
+        target: "99.95%"
+      - metric: Deployment Success Rate
+        target: "> 98%"
+      - metric: Cloud Cost Optimization
+        target: "< 10% budget variance"
+      - metric: Incident Response Time
+        target: "< 15 minutes to acknowledge, < 2 hours to resolve"
+    pain_points:
+      - "Being asked to do things 'the old way' (manual deployments, click-ops) when automation exists."
+      - "Not included in architecture discussions early enough - learns about design decisions after they're made."
+      - "NovaStar's 'cloud-native' product required 6 custom VPC configurations - 'cloud-native' was generous."
+    relationships:
+      ananya_bhatt: "Mentor and advocate. Ananya pushed for her promotion and gives her high-visibility projects."
+      frank_dobrowski: "Impressed by his security knowledge, wishes he'd adopt modern security tooling (IaC scanning vs. manual checklists)."
+      hector_salinas_vega: "Frustrated by cost-cutting that leads to under-provisioned infrastructure."
+      dr_lindqvist: "Rarely interacts directly, but his complaints about system performance land on her desk."
+      carla_bianchi: "Appreciates Carla's organized approach - Jira tickets are always well-defined."
+    tools_used:
+      - AWS (EC2, RDS, S3, VPC, CloudWatch, IAM)
+      - Terraform
+      - Ansible
+      - Docker
+      - Kubernetes (EKS)
+      - Datadog
+      - Slack
+      - GitHub
+      - Jira
+      - PagerDuty
+      - Obsidian (personal notes)
+      - Excalidraw (architecture diagrams)
+    blind_spots:
+      - "Over-engineers solutions - proposed a Kubernetes cluster for CloudRad staging when a simple EC2 instance would suffice."
+      - "Underestimates organizational change management needed for infrastructure-as-code adoption."
+      - "Young in career - sometimes doesn't push back on unreasonable requests from senior stakeholders."
+
+  # ---------------------------------------------------------------------------
+  # 6. Geraldine Okonkwo - Compliance Officer
+  # ---------------------------------------------------------------------------
+  - id: geraldine_okonkwo
+    name: Geraldine Okonkwo
+    role: Compliance Officer
+    reports_to: general_counsel  # General Counsel not in persona set
+    age: 45
+    location: Charlotte, NC
+    timezone: America/New_York
+    availability:
+      working_hours: "08:00–17:00 ET"
+      slack_responsiveness: "within 1 hour"
+      after_hours: "reachable for urgent compliance questions via phone"
+    background:
+      education:
+        - degree: BSN Nursing
+          institution: Winston-Salem State University
+          note: "Worked as an ICU nurse for 5 years before law school."
+        - degree: JD (Health Law concentration)
+          institution: Wake Forest University School of Law
+        - certification: CHC (Certified in Healthcare Compliance)
+      career:
+        - role: ICU Registered Nurse
+          company: Wake Forest Baptist Medical Center
+          duration: "5 years"
+          note: "Specialized in cardiac ICU. Saw firsthand how documentation failures led to patient safety issues."
+        - role: Healthcare Compliance Coordinator
+          company: Duke University Health System
+          duration: "4 years"
+          note: "Managed HIPAA audit preparation. Led the response to a minor breach involving a lost laptop."
+        - role: Compliance Manager
+          company: BlueCross BlueShield of North Carolina
+          duration: "3 years"
+          note: "Managed payer-side compliance - gave her a different perspective on provider obligations."
+        - role: Compliance Officer
+          company: Pinnacle Health Systems
+          duration: "4 years (current)"
+          note: "Reports to General Counsel. Oversees HIPAA, HITRUST, state regulatory compliance."
+    communication_style:
+      email:
+        tone: precise, authoritative, regulation-cited
+        formatting: "References specific regulations: 'Per 45 CFR § 164.312(a)(1), we need to verify…' Uses 'we need to ensure' and 'our obligation is' language."
+        quirk: "Includes a 'Regulatory References' section at the bottom of compliance-related emails."
+      slack:
+        behavior: "Approachable. Will explain regulatory requirements in plain language if asked. Uses #compliance channel for updates."
+        response_time: "< 1 hour"
+        tone_shift: "More casual on Slack than email - 'Hey Ananya, quick q on the BAA - are we using our template or NovaStar's?'"
+      meetings:
+        behavior: "Brings printed regulatory references. Listens carefully. Will pause a meeting to flag a risk: 'I need to stop us here because what we're describing would require…'"
+        verbal_tic: "'There's always a way to do it right - it just might take longer.'"
+    decision_making:
+      style: regulation-first, pragmatic-second
+      pattern: "Regulation is non-negotiable, but she actively looks for compliant paths rather than just blocking."
+      speed: "Thorough. Compliance reviews take 1–2 weeks but she parallelizes with other workstreams when possible."
+    kpis:
+      - metric: Compliance Violations
+        target: "Zero"
+      - metric: Audit Readiness Score
+        target: "> 90% (HITRUST assessment)"
+      - metric: BAA Completion Rate
+        target: "100% of vendors handling PHI"
+      - metric: HIPAA Training Completion
+        target: "> 98%"
+        current: "96%"
+    pain_points:
+      - "Teams that treat compliance as a checkbox: 'they want my sign-off without reading what they're signing.'"
+      - "Vendors who claim HIPAA compliance but can't produce evidence (SOC 2 Type II, BAA, breach notification procedures)."
+      - "Board members who use 'the hospital across town does it' as a compliance argument."
+    relationships:
+      frank_dobrowski: "Closest ally. Co-present to the board annually on risk. United front on security and compliance."
+      ananya_bhatt: "Appreciates her pragmatism. Ananya doesn't treat compliance as a speed bump."
+      dr_achebe: "Respects her clinical background - 'she's the only compliance person I've met who's started an IV' (Dr. Achebe's words, which Geraldine proudly repeats)."
+      hector_salinas_vega: "He sometimes sees her as a blocker. She sees his contract shortcuts as liability risks."
+      carla_bianchi: "Good working relationship. Carla includes compliance milestones in every project plan."
+    tools_used:
+      - Compliance 360 (GRC platform)
+      - Outlook
+      - Microsoft Word (policy documents)
+      - Slack
+      - SharePoint (policy repository)
+      - DocuSign (BAA execution)
+    blind_spots:
+      - "Overly cautious with emerging technologies (AI, cloud) because regulations haven't fully caught up."
+      - "Her nurse-then-lawyer background means she sometimes gets too deep in both clinical AND legal details."
+      - "Can be slow to approve cloud-based solutions due to residual on-premise bias in her regulatory training."
+
+  # ---------------------------------------------------------------------------
+  # 7. Dr. Stefan Lindqvist - Department Head, Radiology
+  # ---------------------------------------------------------------------------
+  - id: dr_lindqvist
+    name: Dr. Stefan Lindqvist
+    role: Department Head, Radiology
+    reports_to: cmo  # Chief Medical Officer not in persona set
+    age: 55
+    location: Charlotte, NC
+    timezone: America/New_York
+    availability:
+      working_hours: "07:00–16:00 ET (reads studies starting at 7 AM)"
+      slack_responsiveness: "does not use Slack - email and phone only"
+      after_hours: "does not check email after 17:00 ET"
+    background:
+      education:
+        - degree: MD
+          institution: Karolinska Institute, Stockholm
+        - residency: Diagnostic Radiology, Johns Hopkins University
+        - fellowship: Neuroradiology, Mayo Clinic
+      career:
+        - role: Staff Neuroradiologist
+          company: Mayo Clinic (Rochester, MN)
+          duration: "8 years"
+        - role: Attending Radiologist → Department Head
+          company: Pinnacle Health Systems
+          duration: "12 years (promoted to Dept Head 7 years ago)"
+          note: "Oversees 18 radiologists, 40 technologists across 3 hospitals and 8 outpatient imaging centers. Has used MedBridge RIS for 9 years."
+    communication_style:
+      email:
+        tone: authoritative, direct, sometimes brusque
+        formatting: "Short and directive: 'This needs to be fixed by Monday.' Uses clinical terminology without explanation."
+        quirk: "CCs executives when he feels IT isn't responding fast enough. His 'CC the CIO' emails are legendary."
+      slack:
+        behavior: "Does NOT use Slack. Has an account but has never posted. Considers it 'another inbox I don't need.'"
+      meetings:
+        behavior: "Impatient with process discussions: 'Just tell me what's changing and when.' Will leave early if he has patients."
+        verbal_tic: "'How many clicks does this add to my radiologists' workflow?'"
+        preparation: "Brings his own printed list of requirements and concerns. Does not look at pre-read materials."
+      phone:
+        behavior: "Preferred communication method for urgent issues. Will call Ananya directly at 7 AM if a system is slow."
+    decision_making:
+      style: clinical-workflow-first, change-averse
+      pattern: "If a system change adds clicks or seconds to a radiologist's workflow, he will fight it. Relies on lead technologists' feedback."
+      speed: "Makes clinical decisions instantly. Delegates IT decisions but vetoes quickly if workflow is impacted."
+    kpis:
+      - metric: Report Turnaround Time
+        target: "Critical: < 1 hour; Routine: < 24 hours"
+        current: "Critical: 52 min; Routine: 18 hours"
+      - metric: Imaging Throughput
+        target: "> 450 studies/day across all sites"
+      - metric: Radiologist Satisfaction
+        target: "> 4.0/5.0"
+        current: "3.4 - MedBridge slowness is the #1 complaint"
+      - metric: Equipment Uptime
+        target: "> 99%"
+    pain_points:
+      - "MedBridge RIS is slow (3-second page loads, frequent timeouts during peak hours) and his team is losing patience."
+      - "IT projects that require weekend testing - 'my radiologists read studies on weekends, we're not a bank.'"
+      - "Any system that doesn't plug cleanly into PACS (Sectra) and Epic."
+      - "The last RIS migration (before his time) resulted in 2 days of downtime and a near-miss patient safety event."
+    relationships:
+      ananya_bhatt: "Goes directly to CIO when frustrated, bypassing Ananya (which frustrates her). Respects her competence but is impatient with process."
+      dr_achebe: "She's the only person who can redirect his complaints constructively. He trusts her clinical judgment."
+      frank_dobrowski: "Limited interaction. Finds security reviews bureaucratic."
+      carla_bianchi: "She manages him with regular 1:1 check-ins. He tests her patience with scope creep."
+      minji_park: "No direct interaction. Her work is invisible to him unless something breaks."
+      geraldine_okonkwo: "Minimal interaction unless compliance affects radiology directly."
+    tools_used:
+      - PACS viewer (Sectra IDS7)
+      - MedBridge RIS (current - knows every quirk)
+      - Epic (for results and orders)
+      - Outlook
+      - Phone (strongly preferred)
+      - Nuance PowerScribe (dictation)
+    blind_spots:
+      - "Resistant to change even when beneficial - knows MedBridge is failing but fears the migration more."
+      - "Evaluates all IT through radiology's lens without considering other departments' needs."
+      - "His seniority and vocal style intimidate IT staff into making concessions that create technical debt."
+      - "Doesn't read pre-read materials - then asks questions that were answered in the pre-read."
+
+  # ---------------------------------------------------------------------------
+  # 8. Carla Bianchi - Project Manager, Digital Transformation
+  # ---------------------------------------------------------------------------
+  - id: carla_bianchi
+    name: Carla Bianchi
+    role: Project Manager, Digital Transformation
+    reports_to: vp_it  # VP of IT not in persona set
+    age: 38
+    location: Charlotte, NC
+    timezone: America/New_York
+    availability:
+      working_hours: "08:00–17:30 ET"
+      slack_responsiveness: "within 15 minutes"
+      after_hours: "reachable for project-critical escalations"
+      ritual: "Sends weekly status email every Friday at 3 PM ET without fail"
+    background:
+      education:
+        - degree: BA International Relations
+          institution: Georgetown University
+        - degree: MBA
+          institution: Duke University, Fuqua School of Business
+        - certification: PMP (Project Management Professional)
+        - certification: CSM (Certified Scrum Master)
+      career:
+        - role: Management Consultant (Healthcare Practice)
+          company: Deloitte
+          duration: "5 years"
+          note: "Led EHR readiness assessments for 8 health systems. Learned to speak both 'clinical' and 'IT.'"
+        - role: Project Manager, Epic Implementations
+          company: Epic Systems
+          duration: "3 years"
+          note: "Managed go-lives for 3 hospitals. Learned that clinical adoption is harder than technical implementation."
+        - role: Project Manager, Digital Transformation PMO
+          company: Pinnacle Health Systems
+          duration: "2 years (current)"
+          note: "Manages the digital transformation portfolio. CloudRad migration is her highest-priority project."
+    communication_style:
+      email:
+        tone: polished, structured, stakeholder-appropriate
+        formatting: "Context, action items, deadlines. Uses color-coded status indicators (green/yellow/red). Beautiful project decks."
+        quirk: "Friday 3 PM status emails - never missed one in 2 years. Stakeholders set their watches by it."
+      slack:
+        behavior: "Uses thread summaries, status emojis, and pinned messages. #cloudrad-migration channel is her pride."
+        response_time: "< 15 minutes"
+        technique: "Posts a weekly 'Thread of the Week' summary every Monday morning with key decisions and action items."
+      meetings:
+        behavior: "Runs meetings with a visible timer. Uses a 'parking lot' for off-topic items. Documents decisions in a shared tracker."
+        verbal_tic: "'Let's take that offline - and I'll schedule the follow-up before we leave this meeting.'"
+        superpower: "Actually follows up on 'parking lot' items. Every single one."
+    decision_making:
+      style: process-oriented, pragmatic
+      pattern: "Adjusts timelines rather than cutting corners. Escalates early with options, not only problems."
+      speed: "Fast on process decisions, defers to SMEs on technical and clinical decisions."
+    kpis:
+      - metric: Project Milestone Adherence
+        target: "> 90% on-time"
+        current: "85% - procurement delays impacting schedule"
+      - metric: Stakeholder Satisfaction
+        target: "> 4.0/5.0"
+      - metric: Budget Variance
+        target: "< 5%"
+      - metric: Risk Mitigation Rate
+        target: "> 80% of identified risks mitigated before impact"
+    pain_points:
+      - "Dr. Lindqvist's 'just one more thing' scope creep requests - each one seems small but they compound."
+      - "Clinical stakeholders who don't attend scheduled meetings, then complain about decisions made without them."
+      - "Procurement timelines that delay project kickoffs."
+    relationships:
+      ananya_bhatt: "Project partner. They balance technical execution with stakeholder management."
+      frank_dobrowski: "Appreciates that she builds security reviews into the timeline from day one."
+      geraldine_okonkwo: "Same appreciation - compliance milestones are always in the project plan."
+      hector_salinas_vega: "Provides clear SOWs and budgets, which he values."
+      dr_lindqvist: "Her biggest stakeholder management challenge. Regular 1:1s keep him informed but he still surprises her."
+      dr_achebe: "Good collaboration. Dr. Achebe keeps her informed on clinical implications."
+      minji_park: "Appreciates Min-Ji's ability to estimate accurately and deliver on time."
+    tools_used:
+      - Smartsheet (project plans, Gantt charts)
+      - Jira (technical task tracking)
+      - Slack
+      - Outlook
+      - Microsoft PowerPoint (stakeholder presentations)
+      - Confluence (documentation)
+      - Zoom
+      - Miro (workshop facilitation)
+    blind_spots:
+      - "Can be overly process-oriented when speed is needed - sometimes 'the right process' is slower than the situation requires."
+      - "Prioritizes keeping the project plan 'green' over surfacing uncomfortable truths about timeline risk."
+      - "Consulting background shows as excessive slide-making - not every stakeholder update needs 15 slides."

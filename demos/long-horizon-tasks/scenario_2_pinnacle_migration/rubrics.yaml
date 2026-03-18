@@ -1,0 +1,951 @@
+# =============================================================================
+# Scenario 2: Pinnacle Health Systems - CloudRad Migration Rubrics
+# =============================================================================
+# Each task has programmatic verifiers (pass/fail) and qualitative rubrics (1–5).
+# Programmatic verifiers are implemented in verifiers.py.
+# =============================================================================
+
+scoring_scale:
+  1: "Unacceptable - fails the requirement, creates risk, or violates compliance"
+  2: "Below expectations - partially meets requirement with significant gaps"
+  3: "Meets expectations - satisfactory with minor gaps"
+  4: "Exceeds expectations - strong execution with attention to healthcare context"
+  5: "Exceptional - demonstrates deep understanding of healthcare IT, compliance, and clinical stakeholders"
+
+# =============================================================================
+# T1: Vendor Security Questionnaire Review
+# =============================================================================
+T1_vendor_security_review:
+  programmatic_checks:
+    - id: T1_PC1
+      name: email_sent_to_frank
+      description: "Email sent to frank_dobrowski via Outlook (not Slack)"
+      type: boolean
+
+    - id: T1_PC2
+      name: not_sent_via_slack
+      description: "No Slack message sent to Frank about security details"
+      type: boolean
+
+    - id: T1_PC3
+      name: classification_header
+      description: "Email includes 'INTERNAL - CONFIDENTIAL' classification header"
+      type: boolean
+
+    - id: T1_PC4
+      name: all_docs_attached
+      description: "Email includes all required attachments"
+      type: checklist
+      items:
+        - sig_lite_questionnaire
+        - soc2_type2_report
+        - penetration_test_results
+        - data_flow_diagram
+
+    - id: T1_PC5
+      name: deadline_included
+      description: "Email includes a specific review deadline"
+      type: boolean
+
+    - id: T1_PC6
+      name: servicenow_ticket_created
+      description: "Tracking ticket created in ServiceNow GRC module"
+      type: boolean
+
+  rubric_criteria:
+    - id: T1_R1
+      name: security_channel_discipline
+      dimension: Persona Fidelity
+      description: >
+        Did the agent use the correct channel for Frank? He does NOT discuss
+        security on Slack. All security-related communication must be via
+        encrypted email or in-person.
+      scoring:
+        1: "Posted security details in a Slack channel"
+        2: "Sent initial request via email but followed up on Slack"
+        3: "Used email throughout but without classification headers"
+        4: "Email only, with proper classification headers"
+        5: "Email with classification headers, did not forward Frank's findings without Ananya's approval, and managed vendor back-and-forth through Ananya (not Frank)"
+
+    - id: T1_R2
+      name: review_timeline_respect
+      dimension: Process Awareness
+      description: >
+        Did the agent respect Frank's 2–3 week review timeline without pushing
+        him to rush? Pushing Frank on security reviews is counterproductive.
+      scoring:
+        1: "Asked Frank to rush or complete within days"
+        2: "Set an aggressive deadline with language implying urgency"
+        3: "Set a reasonable deadline within Frank's typical timeline"
+        4: "Built 2–3 weeks into the project plan and communicated a deadline that respects this"
+        5: "Respected timeline, proactively identified that T1 is on the critical path, and started parallel tasks (T2, T3) to minimize schedule impact"
+
+    - id: T1_R3
+      name: concern_escalation_handling
+      dimension: Judgment
+      description: >
+        If Frank expressed 'concerns,' did the agent treat it as a blocker
+        and schedule a meeting (not try to negotiate or dismiss)?
+      scoring:
+        1: "Tried to argue with or dismiss Frank's concerns"
+        2: "Acknowledged concerns but tried to find a workaround without addressing them"
+        3: "Treated concerns as a blocker and informed Ananya"
+        4: "Treated as blocker, informed Ananya, proposed scheduling a meeting between Frank and NovaStar security"
+        5: "Treated as blocker, informed Ananya, proposed meeting, pre-gathered NovaStar's responses to likely concerns, and updated the project timeline"
+
+# =============================================================================
+# T2: Data Schema Mapping
+# =============================================================================
+T2_data_schema_mapping:
+  programmatic_checks:
+    - id: T2_PC1
+      name: slack_message_to_minji
+      description: "Slack message sent to Min-Ji in #cloudrad-migration"
+      type: boolean
+
+    - id: T2_PC2
+      name: jira_ticket_created
+      description: "Jira ticket CLOUDRAD-101 created with sub-tasks for each data domain"
+      type: boolean
+
+    - id: T2_PC3
+      name: subtasks_created
+      description: "Sub-tasks exist for all data domains"
+      type: checklist
+      items:
+        - demographics
+        - studies
+        - reports
+        - scheduling
+        - billing
+
+    - id: T2_PC4
+      name: confluence_doc_created
+      description: "Schema mapping document created in Confluence"
+      type: boolean
+
+    - id: T2_PC5
+      name: geraldine_phi_review_requested
+      description: "Request sent to Geraldine to review PHI fields and 42 CFR Part 2 handling"
+      type: boolean
+
+  rubric_criteria:
+    - id: T2_R1
+      name: technical_communication_match
+      dimension: Persona Fidelity
+      description: >
+        Did the agent communicate with Min-Ji in her preferred technical style?
+        She uses code snippets, architecture diagrams, and expects detailed
+        technical context.
+      scoring:
+        1: "Sent a vague, non-technical request ('please map the data')"
+        2: "Some technical detail but insufficient for Min-Ji to start work"
+        3: "Sufficient technical detail with clear scope"
+        4: "Technical detail matching Min-Ji's level, with references to specific data domains and known challenges (MedBridge's missing documentation)"
+        5: "Technically precise, acknowledged the MedBridge documentation gap, suggested Min-Ji's preferred approach (database reverse-engineering), and created well-structured Jira sub-tasks she can track"
+
+    - id: T2_R2
+      name: phi_awareness
+      dimension: Compliance Awareness
+      description: >
+        Did the agent proactively identify that PHI fields require special
+        handling and involve Geraldine for 42 CFR Part 2 review?
+      scoring:
+        1: "No mention of PHI or compliance requirements"
+        2: "Mentioned PHI but didn't involve compliance"
+        3: "Involved Geraldine for general PHI review"
+        4: "Involved Geraldine with specific mention of 42 CFR Part 2 (substance abuse records)"
+        5: "Proactively flagged 42 CFR Part 2 requirements, involved Geraldine early, and noted that substance abuse records need additional protections beyond standard HIPAA"
+
+    - id: T2_R3
+      name: over_engineering_check
+      dimension: Solution Appropriateness
+      description: >
+        If Min-Ji proposed an over-engineered solution (e.g., Kubernetes for
+        the ETL pipeline), did the agent gently steer toward simplicity?
+      scoring:
+        1: "Encouraged the over-engineered approach"
+        2: "Accepted the approach without questioning"
+        3: "Asked clarifying questions about the approach"
+        4: "Gently suggested a simpler alternative while respecting Min-Ji's technical judgment"
+        5: "Respectfully proposed the simpler approach, explained why (timeline, scope), offered to revisit the advanced approach post-migration, and deferred to Ananya if Min-Ji disagreed"
+
+# =============================================================================
+# T3: Stakeholder Kickoff Meeting
+# =============================================================================
+T3_stakeholder_kickoff:
+  programmatic_checks:
+    - id: T3_PC1
+      name: all_attendees_invited
+      description: "Calendar invite includes all 8 stakeholders"
+      type: checklist
+      items:
+        - ananya_bhatt
+        - frank_dobrowski
+        - dr_achebe
+        - hector_salinas_vega
+        - minji_park
+        - geraldine_okonkwo
+        - dr_lindqvist
+        - carla_bianchi
+
+    - id: T3_PC2
+      name: feasible_time_slot
+      description: "Meeting scheduled within feasible window (Mon/Wed/Fri, 08:30–10:00 or 13:00–14:30 ET)"
+      type: boolean
+
+    - id: T3_PC3
+      name: dr_lindqvist_constraints
+      description: "Not scheduled on Tuesday (his satellite facility day)"
+      type: boolean
+
+    - id: T3_PC4
+      name: dr_achebe_constraints
+      description: "Not scheduled on Tuesday or Thursday (clinic days)"
+      type: boolean
+
+    - id: T3_PC5
+      name: duration_correct
+      description: "Meeting is 90 minutes"
+      type: exact_value
+      expected: 90
+
+    - id: T3_PC6
+      name: agenda_included
+      description: "Agenda included in calendar invite"
+      type: boolean
+
+    - id: T3_PC7
+      name: in_person_specified
+      description: "Invite specifies in-person at Charlotte campus (not virtual)"
+      type: boolean
+
+    - id: T3_PC8
+      name: conference_room_booked
+      description: "Conference room with projector and whiteboard reserved"
+      type: boolean
+
+  rubric_criteria:
+    - id: T3_R1
+      name: multi_constraint_scheduling
+      dimension: Operational Complexity
+      description: >
+        Did the agent successfully work through 8 personas' scheduling constraints,
+        including Dr. Lindqvist's no-Tuesdays, Dr. Achebe's clinic days, and
+        Frank's preference for mornings?
+      scoring:
+        1: "Violated one or more hard constraints (e.g., scheduled on Dr. Achebe's clinic day)"
+        2: "Met hard constraints but ignored soft preferences"
+        3: "Met all hard constraints and most soft preferences"
+        4: "Met all constraints, optimized for preferences, and provided a backup option"
+        5: "Perfect scheduling, noted Frank's morning preference, booked a room with printed agendas (for Frank and Dr. Lindqvist), and prepared a 1-page summary for Dr. Lindqvist (who doesn't read pre-reads)"
+
+    - id: T3_R2
+      name: agenda_clinical_awareness
+      dimension: Healthcare Context
+      description: >
+        Does the agenda appropriately balance clinical, technical, compliance,
+        and project management perspectives?
+      scoring:
+        1: "Agenda is purely technical with no clinical voice"
+        2: "Clinical perspective is an afterthought"
+        3: "Balanced agenda with all perspectives represented"
+        4: "Clinical requirements and workflow impact are given prominent agenda time, matching a healthcare project's priorities"
+        5: "Agenda leads with clinical impact (Dr. Achebe and Dr. Lindqvist), technical and compliance support the clinical goals, and Carla's project governance wraps it up - this is a clinical system first, IT project second"
+
+    - id: T3_R3
+      name: dr_lindqvist_accommodation
+      dimension: Difficult Stakeholder Management
+      description: >
+        Did the agent accommodate Dr. Lindqvist's known behaviors (doesn't read
+        pre-reads, prefers phone, impatient with process, will leave for patients)?
+      scoring:
+        1: "Sent Dr. Lindqvist a long pre-read email and expected him to prepare"
+        2: "Sent standard invite without accommodations"
+        3: "Sent a concise invite with short agenda"
+        4: "Prepared a 1-page printed summary, kept his agenda section focused on workflow impact"
+        5: "Prepared printed summary, scheduled his section early in the meeting (before he might leave), framed the agenda in clinical terms ('how many clicks'), and noted that printed agendas will be available"
+
+# =============================================================================
+# T4: BAA Execution
+# =============================================================================
+T4_baa_execution:
+  programmatic_checks:
+    - id: T4_PC1
+      name: security_review_complete_first
+      description: "T4 did not start until T1 (Frank's security review) was complete"
+      type: boolean
+
+    - id: T4_PC2
+      name: geraldine_review_sent
+      description: "BAA sent to Geraldine for compliance review"
+      type: boolean
+
+    - id: T4_PC3
+      name: frank_review_sent
+      description: "BAA sent to Frank for security terms review"
+      type: boolean
+
+    - id: T4_PC4
+      name: hector_review_sent
+      description: "BAA sent to Hector via Coupa for commercial terms"
+      type: boolean
+
+    - id: T4_PC5
+      name: 42cfr_provisions_flagged
+      description: "42 CFR Part 2 provisions are specifically flagged in the BAA review request"
+      type: boolean
+
+    - id: T4_PC6
+      name: breach_notification_24hr
+      description: "BAA includes 24-hour breach notification (Pinnacle's internal policy, stricter than HIPAA)"
+      type: boolean
+
+    - id: T4_PC7
+      name: docusign_envelope_created
+      description: "DocuSign envelope created with correct signing order"
+      type: boolean
+
+    - id: T4_PC8
+      name: jira_ticket_tracking
+      description: "Jira ticket created with sub-tasks for each reviewer"
+      type: boolean
+
+  rubric_criteria:
+    - id: T4_R1
+      name: compliance_depth
+      dimension: Regulatory Knowledge
+      description: >
+        Did the agent demonstrate understanding of healthcare-specific BAA
+        requirements, including 42 CFR Part 2 and Pinnacle's 24-hour breach
+        notification policy?
+      scoring:
+        1: "Treated BAA as a standard vendor contract with no healthcare-specific awareness"
+        2: "Mentioned HIPAA but missed 42 CFR Part 2 and Pinnacle's stricter policies"
+        3: "Included HIPAA and 42 CFR Part 2 requirements"
+        4: "Flagged all regulatory requirements including Pinnacle's 24-hour breach notification policy"
+        5: "Full regulatory coverage, routed through Geraldine first (she expedites legal review), flagged 42 CFR Part 2, 24-hour breach notification, and audit rights - shows deep healthcare compliance awareness"
+
+    - id: T4_R2
+      name: multi_stakeholder_coordination
+      dimension: Process Orchestration
+      description: >
+        Did the agent coordinate the parallel reviews efficiently (Geraldine for
+        compliance, Frank for security, Hector for commercial) while respecting
+        the T1 dependency?
+      scoring:
+        1: "Sent BAA for review before T1 was complete"
+        2: "Sequential reviews (one after another) causing unnecessary delay"
+        3: "Parallel reviews with basic tracking"
+        4: "Parallel reviews with clear deadlines, sub-tasks in Jira, and Geraldine's 'recommended for approval' memo to expedite legal"
+        5: "Parallel reviews, proactive timeline management, Geraldine's pre-review to expedite legal, Hector notified early about commercial terms, and escalation path defined if NovaStar pushes back on terms"
+
+    - id: T4_R3
+      name: hector_frank_tension_navigation
+      dimension: Political Awareness
+      description: >
+        Did the agent manage the known tension between Hector ('Frank adds
+        3 weeks') and Frank ('Hector signs too fast')? Both need to feel
+        respected without one blocking the other.
+      scoring:
+        1: "Actions would escalate the tension (e.g., telling Hector that Frank is the bottleneck)"
+        2: "Ignored the tension but didn't worsen it"
+        3: "Managed both independently without creating friction"
+        4: "Managed both with mutual visibility, aligned deadlines, and no blame framing"
+        5: "Orchestrated a smooth parallel process where both felt their role was valued, set aligned deadlines, and preemptively addressed the tension by involving Carla as project tracker"
+
+# =============================================================================
+# T5: Provision Staging Environment
+# =============================================================================
+T5_provision_staging:
+  programmatic_checks:
+    - id: T5_PC1
+      name: dependencies_met
+      description: "T2 (schema mapping) and T4 (BAA signed) are complete before provisioning"
+      type: boolean
+
+    - id: T5_PC2
+      name: govcloud_region
+      description: "Staging environment specified in AWS GovCloud (us-gov-west-1)"
+      type: boolean
+
+    - id: T5_PC3
+      name: vpc_isolation
+      description: "VPC isolation from production specified"
+      type: boolean
+
+    - id: T5_PC4
+      name: encryption_at_rest
+      description: "Encryption at rest (KMS, customer-managed keys) specified"
+      type: boolean
+
+    - id: T5_PC5
+      name: encryption_in_transit
+      description: "Encryption in transit (TLS 1.2+) specified"
+      type: boolean
+
+    - id: T5_PC6
+      name: audit_logging
+      description: "CloudWatch audit logging specified"
+      type: boolean
+
+    - id: T5_PC7
+      name: no_credentials_in_slack
+      description: "No AWS credentials or sensitive config shared in Slack"
+      type: boolean
+
+    - id: T5_PC8
+      name: frank_architecture_review
+      description: "Terraform plan shared with Frank for security review before provisioning"
+      type: boolean
+
+    - id: T5_PC9
+      name: jira_ticket
+      description: "Jira ticket CLOUDRAD-105 created with infrastructure sub-tasks"
+      type: boolean
+
+  rubric_criteria:
+    - id: T5_R1
+      name: security_requirements_completeness
+      dimension: Security Awareness
+      description: >
+        Did the agent specify all of Frank's security requirements for the
+        staging environment?
+      scoring:
+        1: "Missing critical security requirements (encryption, VPC isolation)"
+        2: "Some requirements present but significant gaps"
+        3: "All explicitly stated requirements present"
+        4: "All requirements present plus Frank's Terraform review before provisioning"
+        5: "Complete security spec, Frank's pre-approval built in, credentials handled via Secrets Manager (not Slack), and GovCloud region specified - shows HIPAA infrastructure knowledge"
+
+    - id: T5_R2
+      name: over_engineering_management
+      dimension: Pragmatic Judgment
+      description: >
+        If Min-Ji proposed Kubernetes for staging, did the agent steer toward
+        the simpler EC2+RDS approach while respecting her expertise?
+      scoring:
+        1: "Encouraged Kubernetes without questioning scope"
+        2: "Accepted K8s without evaluating whether it's necessary"
+        3: "Asked whether K8s is needed for staging"
+        4: "Gently proposed EC2+RDS for staging with reasoning (timeline, scope), offered K8s as post-migration optimization"
+        5: "Respectful steering with clear reasoning, deferred to Ananya for final call if Min-Ji disagreed, and framed it as 'let's prove the migration works first, then optimize infrastructure'"
+
+# =============================================================================
+# T6: Test Data Migration (Staging)
+# =============================================================================
+T6_test_data_migration:
+  programmatic_checks:
+    - id: T6_PC1
+      name: staging_ready
+      description: "T5 (staging provisioned) is complete before migration"
+      type: boolean
+
+    - id: T6_PC2
+      name: data_deidentified
+      description: "De-identification method confirmed before loading data"
+      type: boolean
+
+    - id: T6_PC3
+      name: geraldine_deident_approval
+      description: "Geraldine approved the de-identification method in writing"
+      type: boolean
+
+    - id: T6_PC4
+      name: validation_performed
+      description: "Both technical and clinical validation performed"
+      type: checklist
+      items:
+        - record_count_comparison
+        - field_mapping_accuracy
+        - referential_integrity
+        - clinical_spot_check
+
+    - id: T6_PC5
+      name: jira_issues_logged
+      description: "Any data issues found are logged as Jira tickets with severity"
+      type: boolean
+
+    - id: T6_PC6
+      name: dr_lindqvist_not_involved
+      description: "Dr. Lindqvist was NOT involved in test migration (saved for UAT). Lead technologist Patricia Vaughn was contacted instead."
+      type: boolean
+
+  rubric_criteria:
+    - id: T6_R1
+      name: deidentification_compliance
+      dimension: Regulatory Rigor
+      description: >
+        Did the agent confirm proper de-identification before loading data into
+        staging, including Geraldine's written approval?
+      scoring:
+        1: "Loaded data without de-identification or approval"
+        2: "De-identified but didn't get Geraldine's approval"
+        3: "De-identified and got verbal approval"
+        4: "De-identified using Safe Harbor method, got written approval from Geraldine"
+        5: "Used Safe Harbor method with 18 identifiers, got written approval, cited 45 CFR § 164.514(b), and documented the process in Confluence for audit trail"
+
+    - id: T6_R2
+      name: stakeholder_scope_management
+      dimension: Stakeholder Judgment
+      description: >
+        Did the agent appropriately involve Patricia Vaughn (lead tech) instead
+        of Dr. Lindqvist for test migration? Dr. Lindqvist's attention should
+        be saved for UAT.
+      scoring:
+        1: "Involved Dr. Lindqvist in test migration technical details"
+        2: "Contacted Dr. Lindqvist for validation instead of his lead tech"
+        3: "Contacted Patricia Vaughn for clinical validation"
+        4: "Contacted Patricia Vaughn with specific validation tasks, kept Dr. Lindqvist informed at high level only"
+        5: "Used Patricia Vaughn for all technical validation, sent Dr. Lindqvist a brief status update (email, 2 sentences), and preserved his engagement for UAT where it matters most"
+
+    - id: T6_R3
+      name: issue_severity_classification
+      dimension: Clinical Risk Awareness
+      description: >
+        Were data issues classified with appropriate severity (P1: data loss/
+        corruption, P2: field mapping error, P3: formatting)?
+      scoring:
+        1: "No severity classification on issues"
+        2: "Severity assigned but without clinical impact consideration"
+        3: "Reasonable severity classification"
+        4: "Severity classification that reflects clinical impact (e.g., wrong MRN = P1 because patient safety)"
+        5: "Severity classification with clinical impact rationale, P1/P2 flagged as go-live blockers, and escalation to Ananya and Dr. Achebe for patient-safety-related findings"
+
+# =============================================================================
+# T7: User Acceptance Testing (UAT)
+# =============================================================================
+T7_uat:
+  programmatic_checks:
+    - id: T7_PC1
+      name: three_sessions_scheduled
+      description: "3 UAT sessions scheduled across different shifts"
+      type: exact_value
+      expected: 3
+
+    - id: T7_PC2
+      name: dr_lindqvist_emailed
+      description: "Dr. Lindqvist contacted via email (not Slack)"
+      type: boolean
+
+    - id: T7_PC3
+      name: not_on_weekend
+      description: "No UAT sessions scheduled on Saturday or Sunday"
+      type: boolean
+
+    - id: T7_PC4
+      name: structured_feedback_form
+      description: "Structured Jira feedback form created (not freeform)"
+      type: boolean
+
+    - id: T7_PC5
+      name: printed_checklist
+      description: "Printed testing checklist prepared for radiology team"
+      type: boolean
+
+    - id: T7_PC6
+      name: p5_findings_escalated
+      description: "Any 'blocks patient care' (5/5) findings immediately escalated to Ananya and Dr. Achebe"
+      type: boolean
+      conditional: true
+
+  rubric_criteria:
+    - id: T7_R1
+      name: dr_lindqvist_management
+      dimension: Difficult Stakeholder Management
+      description: >
+        Did the agent manage Dr. Lindqvist's communication preferences
+        (email only, short, directive) and anticipate his concerns (workflow
+        clicks, integration with PACS and PowerScribe)?
+      scoring:
+        1: "Sent Dr. Lindqvist a Slack message or a long, process-heavy email"
+        2: "Used email but was overly detailed or process-oriented"
+        3: "Short, directive email with key information"
+        4: "Short email, addressed workflow concerns proactively, included Session 1 timing to fit his 07:00 start"
+        5: "Perfect Dr. Lindqvist communication - short email, addressed 'how many clicks' concern, scheduled Session 1 during his preferred hours, printed checklist prepared, and asked him to designate a team lead for Sessions 2–3 (respecting his time)"
+
+    - id: T7_R2
+      name: scope_creep_management
+      dimension: Project Discipline
+      description: >
+        Did the agent classify Dr. Lindqvist's 'just one more thing' requests
+        as post-go-live enhancements (unless they are patient safety issues)?
+      scoring:
+        1: "Accepted all scope additions without classification"
+        2: "Accepted most additions without pushback"
+        3: "Documented additions with classification (in-scope vs. post-go-live)"
+        4: "Classified additions, pushed back diplomatically on non-safety items, documented for post-go-live"
+        5: "Clear classification framework, patient safety items immediately escalated, enhancement requests documented with timeline commitment, and Dr. Lindqvist feels heard even when requests are deferred"
+
+    - id: T7_R3
+      name: shift_coverage_design
+      dimension: Clinical Workflow Awareness
+      description: >
+        Did the 3 UAT sessions meaningfully cover different shifts and roles
+        (radiologists, technologists, scheduling staff)?
+      scoring:
+        1: "All sessions at the same time with the same people"
+        2: "Different times but same roles tested"
+        3: "Different shifts covered with appropriate roles"
+        4: "Morning (radiologists), day (techs + schedulers), evening (off-hours workflow) - each tailored to that group's workflow"
+        5: "Shift-specific sessions with role-appropriate test scripts, realistic study volumes, and feedback forms tailored to each group's concerns (radiologists: speed/clicks, techs: workflow steps, schedulers: order management)"
+
+# =============================================================================
+# T8: Draft Communication Plan
+# =============================================================================
+T8_comms_plan:
+  programmatic_checks:
+    - id: T8_PC1
+      name: dr_achebe_involved
+      description: "Dr. Achebe asked to draft the physician-facing communication"
+      type: boolean
+
+    - id: T8_PC2
+      name: not_on_clinic_day
+      description: "Request to Dr. Achebe NOT sent on Tuesday or Thursday"
+      type: boolean
+
+    - id: T8_PC3
+      name: all_channels_covered
+      description: "Plan includes all required communication channels"
+      type: checklist
+      items:
+        - all_staff_email
+        - department_slack
+        - printed_guides_radiology
+        - it_escalation_paths
+        - faq_document
+        - go_live_timeline
+
+    - id: T8_PC4
+      name: carla_reviewed
+      description: "Communication plan reviewed by Carla for brand consistency"
+      type: boolean
+
+    - id: T8_PC5
+      name: frank_escalation_review
+      description: "Frank reviewed escalation paths to include security incident reporting"
+      type: boolean
+
+  rubric_criteria:
+    - id: T8_R1
+      name: clinical_credibility
+      dimension: Healthcare Communication
+      description: >
+        Did the agent involve Dr. Achebe as the clinical voice of the
+        communication (not IT)? Clinical staff trust messages from a physician
+        more than from IT.
+      scoring:
+        1: "Communication plan is entirely IT-driven with no clinical voice"
+        2: "Dr. Achebe mentioned but not given authorship of clinical communication"
+        3: "Dr. Achebe drafts the physician-facing message"
+        4: "Dr. Achebe drafts the all-staff email (clinical credibility), IT owns the technical communications"
+        5: "Dr. Achebe as clinical voice for all-staff email, her analogies and translation style reflected in the FAQ, printed guides use language she'd approve, and IT escalation paths are positioned as support (not bureaucracy)"
+
+    - id: T8_R2
+      name: migration_anxiety_acknowledgment
+      dimension: Organizational Empathy
+      description: >
+        Does the communication plan address the 'last migration' anxiety?
+        Dr. Lindqvist's team remembers the previous RIS migration that caused
+        2 days of downtime.
+      scoring:
+        1: "No acknowledgment of previous migration experience"
+        2: "Generic reassurance without addressing specific history"
+        3: "Acknowledges that change is hard, mentions safeguards"
+        4: "Specifically addresses the previous migration concerns and explains what's different this time"
+        5: "Directly addresses the previous migration, explains specific safeguards (rollback plan, read-only MedBridge access, 24/7 support), and includes Dr. Achebe's voice on patient safety continuity"
+
+    - id: T8_R3
+      name: dr_lindqvist_print_awareness
+      dimension: Persona-Specific Communication
+      description: >
+        Did the plan include printed materials for Dr. Lindqvist's team
+        (they don't check email for IT updates and don't use Slack)?
+      scoring:
+        1: "Only digital communication channels"
+        2: "Mentioned print but as secondary"
+        3: "Print included as a primary channel for radiology"
+        4: "Printed quick-reference guides for reading rooms, plus email to Dr. Lindqvist personally"
+        5: "Printed guides in every reading room, email + phone call to Dr. Lindqvist, FAQ posted on physical bulletin boards, and 'cheat sheet' comparing old MedBridge steps to new CloudRad steps"
+
+# =============================================================================
+# T9: Schedule Go-Live Window
+# =============================================================================
+T9_schedule_go_live:
+  programmatic_checks:
+    - id: T9_PC1
+      name: dependencies_met
+      description: "T7 (UAT) and T8 (comms plan) both complete"
+      type: boolean
+
+    - id: T9_PC2
+      name: before_hitrust
+      description: "Go-live date is at least 6 weeks before HITRUST recertification"
+      type: boolean
+
+    - id: T9_PC3
+      name: medbridge_readonly
+      description: "Plan specifies MedBridge remains read-only during migration (not fully offline)"
+      type: boolean
+
+    - id: T9_PC4
+      name: novastar_48hr_notice
+      description: "NovaStar given at least 48-hour advance notice"
+      type: boolean
+
+    - id: T9_PC5
+      name: dr_lindqvist_signoff
+      description: "Dr. Lindqvist's sign-off obtained (explicit email - 'fine' or 'agreed' counts)"
+      type: boolean
+
+    - id: T9_PC6
+      name: dr_achebe_signoff
+      description: "Dr. Achebe's sign-off obtained"
+      type: boolean
+
+    - id: T9_PC7
+      name: war_room_booked
+      description: "Physical war room booked with required equipment"
+      type: boolean
+
+    - id: T9_PC8
+      name: slack_channel_created
+      description: "#cloudrad-golive-warroom Slack channel created"
+      type: boolean
+
+  rubric_criteria:
+    - id: T9_R1
+      name: clinical_disruption_minimization
+      dimension: Clinical Sensitivity
+      description: >
+        Did the agent select a go-live window that genuinely minimizes clinical
+        disruption? (Early Saturday morning is optimal, weekday is worst,
+        full Saturday is bad because radiologists read studies)
+      scoring:
+        1: "Proposed a weekday during business hours"
+        2: "Proposed a weekend but during peak radiology hours"
+        3: "Proposed early Saturday morning (low volume)"
+        4: "Proposed early Saturday AM (02:00–08:00 ET), explained the clinical reasoning, got Dr. Lindqvist's buy-in"
+        5: "Optimal window selected with data on study volume patterns, Dr. Lindqvist's input incorporated, rollback plan communicated, and MedBridge read-only access confirmed for historical study review during migration"
+
+    - id: T9_R2
+      name: sign_off_rigor
+      dimension: Process Integrity
+      description: >
+        Did the agent obtain explicit sign-offs from all three required
+        approvers? No response does NOT count.
+      scoring:
+        1: "Proceeded without sign-offs"
+        2: "Got some sign-offs, assumed others"
+        3: "Got all three sign-offs"
+        4: "Got explicit sign-offs, documented them in Jira, forwarded to Carla for project records"
+        5: "Explicit sign-offs documented, war room logistics confirmed, NovaStar notified, rollback plan reviewed by Ananya, and all artifacts filed for HITRUST audit trail"
+
+# =============================================================================
+# T10–T12: Execution Phase
+# =============================================================================
+T10_production_migration:
+  programmatic_checks:
+    - id: T10_PC1
+      name: pre_migration_notifications
+      description: "T-24hr reminder sent to all stakeholders"
+      type: boolean
+
+    - id: T10_PC2
+      name: status_updates_posted
+      description: "Status updates posted to #cloudrad-golive-warroom every 30 minutes"
+      type: boolean
+
+    - id: T10_PC3
+      name: rollback_plan_documented
+      description: "Rollback plan documented and tested before migration"
+      type: boolean
+
+    - id: T10_PC4
+      name: data_encrypted_in_transit
+      description: "All data transferred via TLS 1.2+"
+      type: boolean
+
+    - id: T10_PC5
+      name: jira_timestamps
+      description: "All migration activities logged in Jira with timestamps"
+      type: boolean
+
+  rubric_criteria:
+    - id: T10_R1
+      name: real_time_communication
+      dimension: Crisis Communication
+      description: >
+        Did the agent maintain clear, calm, regular status updates during the
+        migration? Stakeholders are anxious - communication must be proactive.
+      scoring:
+        1: "Long gaps without updates"
+        2: "Sporadic updates without structure"
+        3: "Regular updates every 30 minutes"
+        4: "Regular updates with phase progress, ETA, and clear status (on track/delayed)"
+        5: "Professional war room communication - structured updates, proactive risk flagging, calm tone even under pressure, appropriate channel for each stakeholder (Slack for IT, phone/SMS for Dr. Lindqvist)"
+
+T11_post_migration_validation:
+  programmatic_checks:
+    - id: T11_PC1
+      name: technical_validation
+      description: "Min-Ji performed record count, field, and integration checks"
+      type: boolean
+
+    - id: T11_PC2
+      name: security_scan
+      description: "Frank's team performed Qualys vulnerability scan"
+      type: boolean
+
+    - id: T11_PC3
+      name: clinical_spot_check
+      description: "Patricia Vaughn performed clinical workflow verification"
+      type: boolean
+
+    - id: T11_PC4
+      name: pacs_integration_verified
+      description: "Sectra PACS ↔ CloudRad integration verified"
+      type: boolean
+
+    - id: T11_PC5
+      name: epic_integration_verified
+      description: "Epic ↔ CloudRad (HL7/FHIR) integration verified"
+      type: boolean
+
+    - id: T11_PC6
+      name: performance_within_threshold
+      description: "Page load <1 second, search response <2 seconds"
+      type: boolean
+
+  rubric_criteria:
+    - id: T11_R1
+      name: validation_completeness
+      dimension: Quality Assurance
+      description: >
+        Did validation cover all critical areas: data integrity, security,
+        performance, and clinical integrations (PACS, Epic, PowerScribe)?
+      scoring:
+        1: "Validated only one area"
+        2: "Technical validation but missed clinical integrations"
+        3: "All areas validated"
+        4: "All areas validated with Dr. Lindqvist's performance thresholds explicitly checked"
+        5: "Thorough validation including edge cases (e.g., old studies from MedBridge, STAT orders, after-hours workflow), performance benchmarks documented, and results shared with all stakeholders"
+
+T12_go_live_confirmation:
+  programmatic_checks:
+    - id: T12_PC1
+      name: triple_sign_off
+      description: "Ananya, Frank, and Dr. Achebe all confirmed in writing before go-live declared"
+      type: boolean
+
+    - id: T12_PC2
+      name: confirmation_email_sent
+      description: "Go-live confirmation email sent to all stakeholders"
+      type: boolean
+
+    - id: T12_PC3
+      name: medbridge_readonly_confirmed
+      description: "MedBridge read-only access confirmed for 90-day retention"
+      type: boolean
+
+    - id: T12_PC4
+      name: first_week_monitoring_plan
+      description: "First-week monitoring plan documented and communicated"
+      type: boolean
+
+    - id: T12_PC5
+      name: servicenow_transition
+      description: "Support transitioned from project Jira to operational ServiceNow"
+      type: boolean
+
+    - id: T12_PC6
+      name: dr_lindqvist_phone_call
+      description: "Ananya called Dr. Lindqvist directly (not just email)"
+      type: boolean
+
+  rubric_criteria:
+    - id: T12_R1
+      name: persona_specific_handoff
+      dimension: Stakeholder Awareness
+      description: >
+        Did the go-live communication adapt to each persona's needs and
+        communication preferences?
+      scoring:
+        1: "One generic email to everyone"
+        2: "Differentiated email but same content for everyone"
+        3: "Persona-specific communications for key stakeholders"
+        4: "Tailored communications: Dr. Lindqvist (email + phone), Frank (security attestation), Geraldine (compliance documentation), Hector (SLA activation), Carla (project closure)"
+        5: "Each stakeholder received exactly what they need in their preferred channel: Dr. Lindqvist heard it by phone, Frank got his audit trail, Geraldine confirmed HIPAA documentation, Hector activated SLA monitoring, and Dr. Achebe received talking points for CMO"
+
+# =============================================================================
+# Global / Cross-Task Rubrics
+# =============================================================================
+global_rubrics:
+  - id: G_R1
+    name: hipaa_compliance_throughout
+    dimension: Regulatory Compliance
+    description: >
+      Across all tasks, did the agent consistently maintain HIPAA compliance?
+      (No PHI in Slack, encrypted communications for security, proper
+      de-identification, BAA before data handling)
+    scoring:
+      1: "PHI shared insecurely or compliance steps skipped"
+      2: "Mostly compliant but one or more violations"
+      3: "Compliant throughout"
+      4: "Compliant with proactive identification of compliance requirements"
+      5: "Exemplary compliance - anticipated requirements, cited regulations, created audit trail, and demonstrated that compliance is integrated into workflow rather than bolted on"
+
+  - id: G_R2
+    name: clinical_vs_technical_balance
+    dimension: Healthcare Domain Understanding
+    description: >
+      Did the agent balance clinical needs (patient care, workflow, safety)
+      with technical execution (infrastructure, migration, security)?
+    scoring:
+      1: "Treated this as a pure IT project with no clinical awareness"
+      2: "Acknowledged clinical needs but technical execution dominated decisions"
+      3: "Reasonable balance between clinical and technical"
+      4: "Clinical needs informed technical decisions (e.g., go-live timing based on study volume, UAT designed around clinical workflows)"
+      5: "Clinical outcomes drove the project - every technical decision was evaluated through the lens of patient care, and Dr. Achebe's 'how does this affect patient care?' question was internalized"
+
+  - id: G_R3
+    name: persona_communication_differentiation
+    dimension: Overall Persona Fidelity
+    description: >
+      Did the agent adapt communication style for each persona across all
+      interactions? (Formal encrypted email for Frank, short directive for
+      Dr. Lindqvist, technical for Min-Ji, warm for Dr. Achebe, etc.)
+    scoring:
+      1: "Same communication style for everyone"
+      2: "Some differentiation but inconsistent"
+      3: "Clear differentiation for most personas"
+      4: "Consistent, appropriate differentiation for all 8 personas"
+      5: "Each interaction is perfectly calibrated - Frank gets classification headers, Dr. Lindqvist gets 2-sentence emails, Min-Ji gets code snippets, Dr. Achebe gets clinical framing, Hector gets cost context, Geraldine gets regulatory citations, Carla gets structured project updates"
+
+  - id: G_R4
+    name: dag_dependency_integrity
+    dimension: Project Execution
+    description: >
+      Did the agent respect all DAG dependencies? (e.g., BAA not started
+      before security review, staging not provisioned before BAA, UAT not
+      started before test migration)
+    scoring:
+      1: "Multiple dependency violations"
+      2: "One dependency violation"
+      3: "All dependencies respected"
+      4: "Dependencies respected with efficient parallelization of independent tasks"
+      5: "Perfect DAG execution, identified critical path (T1→T4→T5→T6→T7→T9), started parallel tracks early, and proactively managed bottlenecks (especially Frank's review timeline)"
+
+  - id: G_R5
+    name: difficult_stakeholder_management
+    dimension: Organizational Awareness
+    description: >
+      Did the agent effectively manage Dr. Lindqvist (vocal, change-averse,
+      bypasses process, CC's the CIO) and the Hector-Frank tension?
+    scoring:
+      1: "Stakeholder conflicts escalated or process was bypassed"
+      2: "Stakeholders managed reactively"
+      3: "Proactive management of known stakeholder challenges"
+      4: "Dr. Lindqvist managed with his preferred channels and minimal process overhead; Hector-Frank tension handled smoothly"
+      5: "Dr. Lindqvist felt heard and respected (reducing his need to escalate to CIO), Hector and Frank both felt their reviews were valued and not bottlenecks, and Dr. Achebe was leveraged as the bridge between clinical resistance and IT execution"

@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Long-Horizon Tasks</title>
+<style>
+:root {
+  --orange: #F5A623; --orange-light: #FFF8EE; --orange-dark: #D4880E;
+  --green: #34C759; --green-bg: #E8F8EE; --green-dark: #248A3D;
+  --red: #FF3B30; --red-bg: #FFF0EF;
+  --blue: #007AFF; --blue-bg: #EEF4FF;
+  --purple: #AF52DE; --purple-bg: #F5EEFA;
+  --teal: #5AC8FA; --teal-bg: #E8F8FD;
+  --amber: #FF9500; --amber-bg: #FFF5E6;
+  --indigo: #5856D6; --indigo-bg: #EEEEFB;
+  --g50: #FAFAFA; --g100: #F5F5F5; --g150: #EFEFEF; --g200: #E5E5E5;
+  --g300: #D4D4D4; --g400: #A3A3A3; --g500: #737373; --g600: #525252;
+  --g700: #404040; --g800: #262626; --g900: #171717;
+  --sidebar-w: 220px; --radius: 8px; --radius-lg: 12px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--g50); color: var(--g900); line-height:1.5; display:flex; height:100vh; overflow:hidden; }
+
+/* === LEFT SIDEBAR === */
+.sidebar { width: var(--sidebar-w); background: white; border-right:1px solid var(--g200); display:flex; flex-direction:column; flex-shrink:0; }
+.sidebar-brand { padding:16px 16px 12px; display:flex; align-items:center; gap:10px; font-size:16px; font-weight:700; color:var(--orange); letter-spacing:-0.5px; border-bottom:1px solid var(--g200); }
+.sidebar-brand span { color:var(--g600); font-weight:400; font-size:14px; }
+.sidebar-brand svg { flex-shrink:0; }
+.sidebar-nav { padding:8px; }
+.sidebar-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:14px; font-weight:500; color:var(--g600); transition:all .15s; margin-bottom:2px; border:none; background:none; width:100%; text-align:left; }
+.sidebar-item:hover { background:var(--g100); }
+.sidebar-item.active { background:var(--orange-light); color:var(--orange-dark); font-weight:600; }
+.sidebar-item svg { width:18px; height:18px; flex-shrink:0; }
+.sidebar-divider { height:1px; background:var(--g200); margin:8px 12px; }
+.sidebar-section { padding:8px 16px 4px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; color:var(--g400); }
+.env-pills { padding:8px 12px; display:flex; gap:4px; }
+.env-pill { flex:1; padding:6px 8px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; border:1.5px solid var(--g200); background:white; color:var(--g500); text-align:center; transition:all .15s; }
+.env-pill:hover { border-color:var(--orange); }
+.env-pill.active { background:var(--orange); border-color:var(--orange); color:white; }
+.sidebar-count { font-size:10px; background:var(--g200); color:var(--g600); padding:1px 6px; border-radius:8px; margin-left:auto; }
+
+/* === RIGHT MAIN === */
+.main-area { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.main-header { background:white; border-bottom:1px solid var(--g200); padding:14px 24px; display:flex; align-items:center; gap:12px; flex-shrink:0; min-height:56px; }
+.main-header h2 { font-size:16px; font-weight:700; }
+.main-header .subtitle { font-size:13px; color:var(--g500); font-weight:400; }
+.main-content { flex:1; overflow-y:auto; padding:24px; }
+
+/* === CARDS === */
+.card { background:white; border-radius:var(--radius-lg); box-shadow:0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04); padding:24px; margin-bottom:20px; }
+.card-title { font-size:13px; font-weight:600; color:var(--g500); text-transform:uppercase; letter-spacing:.5px; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+.card-title .dot { width:8px; height:8px; border-radius:50%; }
+
+/* === BADGES === */
+.badge { display:inline-block; padding:2px 10px; border-radius:10px; font-size:11px; font-weight:600; }
+.badge-pass { background:var(--green-bg); color:var(--green-dark); }
+.badge-fail { background:var(--red-bg); color:var(--red); }
+.badge-info { background:var(--blue-bg); color:var(--blue); }
+.badge-warn { background:var(--orange-light); color:var(--orange-dark); }
+.badge-purple { background:var(--purple-bg); color:var(--purple); }
+.badge-teal { background:var(--teal-bg); color:var(--teal); }
+.badge-lg { font-size:13px; padding:4px 14px; }
+
+/* === METRICS === */
+.metrics-row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
+.metric-box { background:var(--g50); border:1px solid var(--g200); border-radius:8px; padding:12px 16px; min-width:100px; flex:1; }
+.metric-label { font-size:11px; font-weight:500; color:var(--g500); text-transform:uppercase; letter-spacing:.4px; }
+.metric-val { font-size:18px; font-weight:700; margin-top:2px; color:var(--g800); }
+
+/* === COLLAPSIBLE SECTIONS === */
+.rsection { border:1px solid var(--g200); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:12px; }
+.rsection-header { display:flex; align-items:center; gap:12px; padding:14px 20px; background:var(--g50); border-bottom:1px solid var(--g200); cursor:pointer; }
+.rsection-header:hover { background:var(--g100); }
+.rsection-header h3 { font-size:14px; font-weight:600; flex:1; }
+.collapsible { overflow:hidden; transition:max-height .3s ease; }
+.chevron-toggle { transition:transform .2s; display:inline-block; color:var(--g400); font-size:12px; }
+.chevron-toggle.open { transform:rotate(180deg); }
+
+/* === RUBRIC ROWS === */
+.rrow { display:flex; align-items:flex-start; padding:12px 20px; border-bottom:1px solid var(--g150); font-size:13px; transition:background .1s; }
+.rrow:last-child { border-bottom:none; } .rrow:hover { background:var(--g50); }
+.rrow .ci { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:12px; font-weight:700; margin-right:12px; margin-top:2px; }
+.rrow .ct { flex:1; color:var(--g700); } .rrow .cs { font-weight:600; font-size:12px; margin-left:12px; min-width:60px; text-align:right; color:var(--g400); white-space:nowrap; }
+
+/* === DIMENSION ITEMS === */
+.dim-item { padding:16px 20px; border-bottom:1px solid var(--g150); }
+.dim-item:last-child { border-bottom:none; }
+.dim-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px; }
+.dim-name { font-size:14px; font-weight:600; color:var(--g800); }
+.dim-reason { font-size:13px; color:var(--g600); line-height:1.7; }
+
+/* === PROFILES === */
+.profile-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:16px; margin-bottom:24px; }
+.profile-card { background:white; border:1px solid var(--g200); border-radius:var(--radius-lg); padding:16px; transition:box-shadow .15s; cursor:pointer; }
+.profile-card:hover { box-shadow:0 4px 12px rgba(0,0,0,.08); }
+.profile-avatar { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; color:white; flex-shrink:0; }
+.profile-top { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+.profile-name { font-size:15px; font-weight:600; }
+.profile-title { font-size:12px; color:var(--g500); }
+.profile-meta { font-size:12px; color:var(--g500); margin-top:4px; }
+
+/* === JSON/KV TABLE === */
+.kv-table { border-collapse:collapse; width:100%; font-size:13px; }
+.kv-table th { text-align:left; padding:6px 12px; background:var(--g100); border:1px solid var(--g200); font-weight:600; color:var(--g700); }
+.kv-table td { padding:6px 12px; border:1px solid var(--g200); color:var(--g700); vertical-align:top; }
+.kv-table td:first-child { font-weight:600; color:var(--g800); width:180px; white-space:nowrap; }
+
+/* === PERSONA DETAIL === */
+.persona-section { margin-bottom:16px; }
+.persona-section-title { font-size:11px; font-weight:700; color:var(--g500); text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px; }
+.career-item { margin-bottom:8px; padding:10px 14px; background:var(--g50); border-radius:8px; border-left:3px solid var(--orange); }
+.career-item .cr-role { font-size:13px; font-weight:600; color:var(--g900); }
+.career-item .cr-company { font-size:12px; color:var(--g500); }
+.career-item .cr-note { font-size:12px; color:var(--g600); margin-top:4px; font-style:italic; }
+.rel-item { display:flex; gap:8px; padding:8px 12px; background:var(--g50); border-radius:6px; margin-bottom:6px; }
+.rel-item .rel-name { font-size:13px; font-weight:600; color:var(--g800); min-width:120px; }
+.rel-item .rel-desc { font-size:12px; color:var(--g600); }
+
+/* === SCORING GUIDE === */
+.score-guide { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+.score-card { flex:1; min-width:140px; padding:8px 10px; border-radius:6px; background:var(--g50); border:1px solid var(--g200); }
+.score-card .sc-num { font-size:15px; font-weight:800; }
+.score-card .sc-desc { font-size:11px; color:var(--g600); margin-top:2px; line-height:1.5; }
+
+/* === MD CONTENT === */
+.md-content { font-size:14px; color:var(--g700); line-height:1.7; max-height:600px; overflow-y:auto; padding:20px; background:var(--g50); border-radius:8px; border:1px solid var(--g200); }
+.md-content.full { max-height:none; }
+.md-content h1 { font-size:20px; font-weight:700; color:var(--g900); margin:24px 0 12px; padding-bottom:8px; border-bottom:2px solid var(--g200); }
+.md-content h2 { font-size:17px; font-weight:700; color:var(--g800); margin:20px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--g200); }
+.md-content h3 { font-size:15px; font-weight:600; color:var(--g800); margin:16px 0 8px; }
+.md-content h4 { font-size:14px; font-weight:600; color:var(--g700); margin:12px 0 6px; }
+.md-content p { margin:0 0 12px; }
+.md-content ul,.md-content ol { margin:0 0 12px; padding-left:24px; }
+.md-content li { margin-bottom:4px; }
+.md-content table { border-collapse:collapse; width:100%; margin:12px 0; font-size:13px; }
+.md-content table th { background:var(--g100); font-weight:600; color:var(--g800); text-align:left; padding:8px 12px; border:1px solid var(--g200); }
+.md-content table td { padding:6px 12px; border:1px solid var(--g200); color:var(--g700); }
+.md-content table tr:hover td { background:#FFFDE7; }
+.md-content pre { background:var(--g800); color:#E0E0E0; padding:14px 16px; border-radius:8px; overflow-x:auto; font-family:'SF Mono',Menlo,monospace; font-size:12px; line-height:1.5; margin:12px 0; }
+.md-content code { background:var(--g150); padding:2px 5px; border-radius:3px; font-family:'SF Mono',Menlo,monospace; font-size:12px; }
+.md-content pre code { background:none; padding:0; }
+.md-content blockquote { border-left:3px solid var(--orange); padding:8px 16px; margin:12px 0; background:var(--orange-light); border-radius:0 6px 6px 0; }
+.md-content hr { border:none; border-top:1px solid var(--g200); margin:16px 0; }
+.md-content strong { color:var(--g900); }
+
+/* === CODE DISPLAY === */
+.code-wrap { background:var(--g800); border-radius:var(--radius-lg); overflow:hidden; }
+.code-header { padding:10px 16px; background:var(--g900); display:flex; align-items:center; gap:8px; }
+.code-header .ch-dot { width:10px; height:10px; border-radius:50%; }
+.code-header .ch-name { font-size:12px; color:var(--g400); font-family:'SF Mono',Menlo,monospace; margin-left:8px; }
+.code-body { padding:16px; overflow:auto; max-height:80vh; font-family:'SF Mono',Menlo,monospace; font-size:12px; line-height:1.6; color:#E0E0E0; white-space:pre; }
+.code-body .kw { color:#C792EA; } .code-body .fn { color:#82AAFF; } .code-body .st { color:#C3E88D; }
+.code-body .cm { color:#546E7A; font-style:italic; } .code-body .dc { color:#FFCB6B; } .code-body .nu { color:#F78C6C; }
+
+/* === PANELS === */
+.panel { display:none; flex-direction:column; flex:1; overflow:hidden; }
+.panel.active { display:flex; }
+
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--g300); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--g400); }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <svg width="28" height="28" viewBox="0 0 39 40" fill="none"><g clip-path="url(#clip0)"><path d="M25.6184 26.5238H36.7879C34.2158 33.8016 27.3592 39.0125 19.316 39.0125C9.06315 39.0125 0.75 30.5566 0.75 20.1276C0.75 9.69867 9.06315 1.25 19.316 1.25C27.3592 1.25 34.2087 6.45363 36.7879 13.7315H25.6184C23.9558 12.0258 21.7176 11.0646 19.316 11.0646C14.4063 11.0646 10.406 15.1336 10.406 20.1348C10.406 25.1361 14.4063 29.1978 19.316 29.1978C21.7176 29.1978 23.9558 28.2438 25.6184 26.531V26.5238Z" fill="#13234D"/><path d="M37.8818 20.125C37.8818 20.7249 37.8534 21.3103 37.7966 21.8957H23.4653L22.7831 22.8064C21.9447 23.9194 20.68 24.5626 19.3157 24.5626C16.9071 24.5626 14.9531 22.5751 14.9531 20.125C14.9531 17.675 16.9071 15.6875 19.3157 15.6875C20.6871 15.6875 21.9518 16.3307 22.7831 17.4437L23.4653 18.3471H37.7966C37.8534 18.9325 37.8818 19.5252 37.8818 20.125Z" fill="#F26125"/></g><defs><clipPath id="clip0"><rect width="39" height="39" fill="white" transform="translate(0 0.5)"/></clipPath></defs></svg>
+    <div>Collinear<br><span>Long-Horizon Tasks</span></div>
+  </div>
+  <div class="sidebar-section">Scenario</div>
+  <div class="env-pills">
+    <button class="env-pill active" onclick="switchEnv('cerulean_qbr')">Cerulean</button>
+    <button class="env-pill" onclick="switchEnv('pinnacle_migration')">Pinnacle</button>
+  </div>
+  <div class="sidebar-divider"></div>
+  <nav class="sidebar-nav" id="sidebar-nav">
+    <button class="sidebar-item active" data-view="overview" onclick="switchView(this,'overview')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+      Overview
+    </button>
+    <button class="sidebar-item" data-view="personas" onclick="switchView(this,'personas')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      Personas <span class="sidebar-count" id="cnt-personas"></span>
+    </button>
+    <button class="sidebar-item" data-view="dag" onclick="switchView(this,'dag')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      Task DAG <span class="sidebar-count">12</span>
+    </button>
+    <button class="sidebar-item" data-view="rubrics" onclick="switchView(this,'rubrics')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      Rubrics <span class="sidebar-count" id="cnt-rubrics"></span>
+    </button>
+    <button class="sidebar-item" data-view="verifiers" onclick="switchView(this,'verifiers')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      Verifiers
+    </button>
+  </nav>
+</aside>
+
+<div class="main-area">
+  <div class="panel active" id="panel-overview">
+    <div class="main-header"><h2 id="hdr-overview">Overview</h2></div>
+    <div class="main-content" id="overview-content"></div>
+  </div>
+  <div class="panel" id="panel-personas">
+    <div class="main-header"><h2 id="hdr-personas">Personas</h2></div>
+    <div class="main-content" id="personas-content"></div>
+  </div>
+  <div class="panel" id="panel-dag">
+    <div class="main-header"><h2 id="hdr-dag">Task DAG</h2></div>
+    <div class="main-content" id="dag-content"></div>
+  </div>
+  <div class="panel" id="panel-rubrics">
+    <div class="main-header"><h2 id="hdr-rubrics">Rubrics</h2></div>
+    <div class="main-content" id="rubrics-content"></div>
+  </div>
+  <div class="panel" id="panel-verifiers">
+    <div class="main-header"><h2 id="hdr-verifiers">Verifiers</h2></div>
+    <div class="main-content" id="verifiers-content"></div>
+  </div>
+</div>
+
+<script>
+let DATA=null, currentEnv='cerulean_qbr', currentView='overview';
+const ENV_META={
+  cerulean_qbr:{name:'Cerulean Analytics',sub:'Q1 Quarterly Business Review'},
+  pinnacle_migration:{name:'Pinnacle Health Systems',sub:'CloudRad Vendor Migration'}
+};
+const COLORS=['#F5A623','#007AFF','#34C759','#AF52DE','#FF3B30','#5856D6','#FF9500','#00C7BE','#2E86AB','#A23B72','#F18F01','#C73E1D'];
+
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function md(raw){
+  let s=esc(raw);
+  s=s.replace(/```(\w*)\n([\s\S]*?)```/g,function(_,lang,code){
+    if(/[┌┐└┘├┤┬┴┼─│▼▲►◄═║╔╗╚╝╠╣╦╩╬]/.test(code))return'<div style="background:var(--g800);color:#A5D6A7;padding:16px;border-radius:8px;overflow-x:auto;font-family:\'SF Mono\',Menlo,monospace;font-size:11px;line-height:1.4;white-space:pre;margin:12px 0">'+code+'</div>';
+    return'<pre><code>'+code+'</code></pre>';
+  });
+  s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
+  s=s.replace(/((?:^\|.+\|$\n?)+)/gm,function(block){
+    const rows=block.trim().split('\n').filter(r=>r.trim());
+    if(rows.length<2)return block;
+    const isSep=r=>/^\|[\s\-:|]+\|$/.test(r);
+    let html='<table>';let headerDone=false;
+    rows.forEach((row,i)=>{
+      if(isSep(row)){headerDone=true;return;}
+      const cells=row.split('|').slice(1,-1).map(c=>c.trim());
+      if(!headerDone&&i===0)html+='<thead><tr>'+cells.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>';
+      else html+='<tr>'+cells.map(c=>'<td>'+c+'</td>').join('')+'</tr>';
+    });
+    html+='</tbody></table>';return html;
+  });
+  s=s.replace(/^#### (.+)$/gm,'<h4>$1</h4>');
+  s=s.replace(/^### (.+)$/gm,'<h3>$1</h3>');
+  s=s.replace(/^## (.+)$/gm,'<h2>$1</h2>');
+  s=s.replace(/^# (.+)$/gm,'<h1>$1</h1>');
+  s=s.replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>');
+  s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  s=s.replace(/\*(.+?)\*/g,'<em>$1</em>');
+  s=s.replace(/^---+$/gm,'<hr>');
+  s=s.replace(/^&gt; (.+)$/gm,'<blockquote>$1</blockquote>');
+  s=s.replace(/((?:^[\s]*[-*] .+$\n?)+)/gm,function(block){
+    const items=block.trim().split('\n').map(l=>l.replace(/^\s*[-*] /,''));
+    return'<ul>'+items.map(i=>'<li>'+i+'</li>').join('')+'</ul>';
+  });
+  s=s.replace(/((?:^\d+\. .+$\n?)+)/gm,function(block){
+    const items=block.trim().split('\n').map(l=>l.replace(/^\d+\. /,''));
+    return'<ol>'+items.map(i=>'<li>'+i+'</li>').join('')+'</ol>';
+  });
+  s=s.replace(/\n\n+/g,'</p><p>');
+  s=s.replace(/\n/g,'<br>');
+  if(!/^<[huptdob]/.test(s))s='<p>'+s+'</p>';
+  s=s.replace(/<p>\s*<\/p>/g,'');
+  s=s.replace(/<p>(<(?:h[1-4]|table|ul|ol|pre|div|hr|blockquote))/g,'$1');
+  s=s.replace(/(<\/(?:h[1-4]|table|ul|ol|pre|div|hr|blockquote)>)<\/p>/g,'$1');
+  return s;
+}
+
+function toggle(id){const el=document.getElementById(id),ch=document.getElementById(id+'-ch');if(!el)return;const o=el.style.maxHeight&&el.style.maxHeight!=='0px';el.style.maxHeight=o?'0px':el.scrollHeight+'px';if(ch)ch.classList.toggle('open',!o);}
+
+function switchEnv(env){
+  currentEnv=env;
+  document.querySelectorAll('.env-pill').forEach(p=>{
+    const t=p.textContent.trim().toLowerCase();
+    p.classList.toggle('active',(env==='cerulean_qbr'&&t==='cerulean')||(env==='pinnacle_migration'&&t==='pinnacle'));
+  });
+  updateCounts();
+  renderCurrentView();
+}
+function switchView(el,view){
+  currentView=view;
+  document.querySelectorAll('.sidebar-item').forEach(i=>i.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+view).classList.add('active');
+  renderCurrentView();
+}
+function updateCounts(){
+  const env=DATA[currentEnv];
+  document.getElementById('cnt-personas').textContent=env.personas.length;
+  const taskKeys=Object.keys(env.rubrics||{}).filter(k=>k!=='scoring_scale');
+  document.getElementById('cnt-rubrics').textContent=taskKeys.length;
+}
+function renderCurrentView(){
+  const r={overview:renderOverview,personas:renderPersonas,dag:renderDAG,rubrics:renderRubrics,verifiers:renderVerifiers};
+  if(r[currentView])r[currentView]();
+}
+
+/* ============ OVERVIEW ============ */
+function renderOverview(){
+  const env=DATA[currentEnv],org=env.organization,meta=ENV_META[currentEnv];
+  let h='';
+
+  // Title
+  h+=`<div style="margin-bottom:24px"><h2 style="font-size:22px;font-weight:800;letter-spacing:-0.5px">${esc(meta.name)}</h2><div style="font-size:14px;color:var(--g500)">${esc(meta.sub)}</div></div>`;
+
+  // Metrics
+  h+='<div class="metrics-row">';
+  if(currentEnv==='cerulean_qbr'){
+    h+=mbox('Industry',org.industry);h+=mbox('Stage',org.stage);h+=mbox('ARR',org.arr);h+=mbox('Headcount',org.headcount);h+=mbox('HQ',org.hq);h+=mbox('Personas',env.personas.length);
+  }else{
+    h+=mbox('Industry',org.industry);h+=mbox('Type',org.type);h+=mbox('Employees',org.employees);h+=mbox('HQ',org.hq);h+=mbox('Hospitals',(org.facilities||{}).hospitals);h+=mbox('Personas',env.personas.length);
+  }
+  h+='</div>';
+
+  // Org details
+  h+='<div class="card"><div class="card-title"><div class="dot" style="background:var(--orange)"></div>ORGANIZATION DETAILS</div>';
+  h+=renderObj(org);
+  h+='</div>';
+
+  // Project overview (extract from project_dag up to the DAG section)
+  const dagText=env.project_dag;
+  const cutIdx=dagText.indexOf('## Task DAG');
+  const overviewText=cutIdx>0?dagText.substring(0,cutIdx):dagText.substring(0,2000);
+  h+='<div class="card"><div class="card-title"><div class="dot" style="background:var(--blue)"></div>PROJECT OVERVIEW</div>';
+  h+=`<div class="md-content full">${md(overviewText)}</div>`;
+  h+='</div>';
+
+  document.getElementById('overview-content').innerHTML=h;
+  document.getElementById('hdr-overview').innerHTML=`${esc(meta.name)} <span class="subtitle">${esc(meta.sub)}</span>`;
+}
+
+function mbox(label,val){return`<div class="metric-box"><div class="metric-label">${esc(label)}</div><div class="metric-val">${esc(String(val==null?'':val))}</div></div>`;}
+
+function renderObj(obj,depth){
+  depth=depth||0;
+  if(obj==null)return'';
+  if(typeof obj==='string'||typeof obj==='number'||typeof obj==='boolean')return esc(String(obj));
+  if(Array.isArray(obj)){
+    if(obj.length===0)return'<em style="color:var(--g400)">none</em>';
+    if(typeof obj[0]==='string'||typeof obj[0]==='number')return obj.map(v=>`<span class="badge badge-info" style="margin:2px">${esc(String(v))}</span>`).join('');
+    return'<ul style="list-style:none;padding:0">'+obj.map(v=>'<li style="padding:4px 0;border-bottom:1px solid var(--g150)">'+renderObj(v,depth+1)+'</li>').join('')+'</ul>';
+  }
+  let h='<table class="kv-table">';
+  for(const[k,v]of Object.entries(obj)){
+    h+=`<tr><td>${esc(k.replace(/_/g,' '))}</td><td>`;
+    if(typeof v==='object'&&v!==null)h+=renderObj(v,depth+1);
+    else h+=esc(String(v==null?'':v));
+    h+='</td></tr>';
+  }
+  h+='</table>';
+  return h;
+}
+
+/* ============ PERSONAS ============ */
+function renderPersonas(){
+  const env=DATA[currentEnv],meta=ENV_META[currentEnv];
+  let h='';
+
+  document.getElementById('hdr-personas').innerHTML=`Personas <span class="subtitle">${env.personas.length} characters</span>`;
+
+  // Compact grid
+  h+='<div class="profile-grid">';
+  env.personas.forEach((p,i)=>{
+    const bg=COLORS[i%COLORS.length],ini=(p.name||'').split(' ').map(w=>w[0]).join('').substring(0,2);
+    h+=`<div class="profile-card" onclick="document.getElementById('pd-${i}').scrollIntoView({behavior:'smooth'});toggle('pd-${i}')">`;
+    h+=`<div class="profile-top"><div class="profile-avatar" style="background:${bg}">${ini}</div><div><div class="profile-name">${esc(p.name)}</div><div class="profile-title">${esc(p.role)}</div></div></div>`;
+    h+=`<div class="profile-meta">${esc(p.location||'')} &middot; ${esc((p.availability||{}).working_hours||'')}</div>`;
+    h+='</div>';
+  });
+  h+='</div>';
+
+  // Detail sections
+  env.personas.forEach((p,i)=>{
+    const bg=COLORS[i%COLORS.length],ini=(p.name||'').split(' ').map(w=>w[0]).join('').substring(0,2);
+    const id='pd-'+i;
+
+    h+='<div class="rsection">';
+    h+=`<div class="rsection-header" onclick="toggle('${id}')">`;
+    h+=`<div class="profile-avatar" style="background:${bg};width:32px;height:32px;font-size:12px">${ini}</div>`;
+    h+=`<h3>${esc(p.name)} <span style="font-weight:400;color:var(--g500)">${esc(p.role)}</span></h3>`;
+    h+=`<span class="badge badge-info">${esc(p.location||'')}</span>`;
+    h+=`<span class="badge badge-teal">${esc(p.timezone||'')}</span>`;
+    h+=`<span class="chevron-toggle" id="${id}-ch">&#9660;</span>`;
+    h+='</div>';
+
+    h+=`<div class="collapsible" id="${id}" style="max-height:0"><div style="padding:20px">`;
+
+    // Basic info
+    h+='<div class="metrics-row">';
+    h+=mbox('Age',p.age);h+=mbox('Location',p.location);h+=mbox('Timezone',p.timezone);h+=mbox('Reports To',(p.reports_to||'').replace(/_/g,' '));
+    h+='</div>';
+
+    // Availability
+    if(p.availability){
+      h+=psec('Availability');
+      h+='<table class="kv-table">';
+      for(const[k,v]of Object.entries(p.availability))h+=`<tr><td>${esc(k.replace(/_/g,' '))}</td><td>${esc(String(v))}</td></tr>`;
+      h+='</table></div>';
+    }
+
+    // Background
+    if(p.background){
+      h+=psec('Background');
+      if(p.background.education){
+        h+='<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:600;color:var(--g400);margin-bottom:6px">EDUCATION</div>';
+        (Array.isArray(p.background.education)?p.background.education:[p.background.education]).forEach(e=>{
+          if(e.degree)h+=`<div style="font-size:13px">${esc(e.degree)}${e.institution?', '+esc(e.institution):''}</div>`;
+          if(e.certification)h+=`<div style="font-size:13px"><span class="badge badge-pass">${esc(e.certification)}</span></div>`;
+        });
+        h+='</div>';
+      }
+      if(p.background.career){
+        h+='<div style="font-size:11px;font-weight:600;color:var(--g400);margin-bottom:6px">CAREER</div>';
+        p.background.career.forEach(c=>{
+          h+='<div class="career-item">';
+          h+=`<div class="cr-role">${esc(c.role||'')}</div>`;
+          h+=`<div class="cr-company">${esc(c.company||'')} (${esc(c.duration||'')})</div>`;
+          if(c.note)h+=`<div class="cr-note">"${esc(c.note)}"</div>`;
+          h+='</div>';
+        });
+      }
+      h+='</div>';
+    }
+
+    // Communication style
+    if(p.communication_style){
+      h+=psec('Communication Style');
+      for(const[channel,details]of Object.entries(p.communication_style)){
+        h+=`<div style="margin-bottom:12px"><span class="badge badge-warn badge-lg" style="margin-bottom:8px">${esc(channel)}</span>`;
+        if(typeof details==='object'&&details!==null){
+          h+='<table class="kv-table">';
+          for(const[k,v]of Object.entries(details))h+=`<tr><td>${esc(k.replace(/_/g,' '))}</td><td>${esc(String(v))}</td></tr>`;
+          h+='</table>';
+        }else h+=`<div style="font-size:13px;color:var(--g700)">${esc(String(details))}</div>`;
+        h+='</div>';
+      }
+      h+='</div>';
+    }
+
+    // Decision making
+    if(p.decision_making){
+      h+=psec('Decision Making');
+      h+='<table class="kv-table">';
+      for(const[k,v]of Object.entries(p.decision_making))h+=`<tr><td>${esc(k.replace(/_/g,' '))}</td><td>${esc(String(v))}</td></tr>`;
+      h+='</table></div>';
+    }
+
+    // KPIs
+    if(p.kpis&&p.kpis.length){
+      h+=psec('KPIs');
+      h+='<table class="kv-table"><thead><tr><th>Metric</th><th>Target</th></tr></thead><tbody>';
+      p.kpis.forEach(k=>{h+=`<tr><td>${esc(k.metric||'')}</td><td style="color:var(--blue);font-weight:600">${esc(k.target||'')}</td></tr>`;});
+      h+='</tbody></table></div>';
+    }
+
+    // Pain points
+    if(p.pain_points&&p.pain_points.length){
+      h+=psec('Pain Points');
+      p.pain_points.forEach(pp=>{h+=`<div style="padding:8px 0;border-bottom:1px solid var(--g150);font-size:13px;color:var(--g700)">${esc(String(pp))}</div>`;});
+      h+='</div>';
+    }
+
+    // Relationships
+    if(p.relationships){
+      h+=psec('Relationships');
+      const rels=typeof p.relationships==='object'&&!Array.isArray(p.relationships)?Object.entries(p.relationships).map(([k,v])=>({name:k,desc:v})):
+        Array.isArray(p.relationships)?p.relationships:[];
+      rels.forEach(r=>{
+        const name=r.name||r.with||'';
+        const desc=r.desc||r.dynamic||r.description||'';
+        h+=`<div class="rel-item"><div class="rel-name">${esc(name.replace(/_/g,' '))}</div><div class="rel-desc">${esc(desc)}</div></div>`;
+      });
+      h+='</div>';
+    }
+
+    // Tools used
+    if(p.tools_used&&p.tools_used.length){
+      h+=psec('Tools Used');
+      h+='<div style="display:flex;flex-wrap:wrap;gap:4px">';
+      p.tools_used.forEach(t=>{h+=`<span class="badge badge-info">${esc(t)}</span>`;});
+      h+='</div></div>';
+    }
+
+    // Blind spots
+    if(p.blind_spots&&p.blind_spots.length){
+      h+=psec('Blind Spots');
+      p.blind_spots.forEach(bs=>{h+=`<div style="padding:8px 0;border-bottom:1px solid var(--g150);font-size:13px;color:var(--g700)">${esc(String(bs))}</div>`;});
+      h+='</div>';
+    }
+
+    // Catch-all for any other fields
+    const handled=['id','name','role','reports_to','age','location','timezone','availability','background','communication_style','decision_making','kpis','pain_points','relationships','tools_used','blind_spots'];
+    for(const[key,val]of Object.entries(p)){
+      if(handled.includes(key)||val==null)continue;
+      h+=psec(key.replace(/_/g,' '));
+      if(typeof val==='object')h+=renderObj(val);
+      else h+=`<div style="font-size:13px;color:var(--g700)">${esc(String(val))}</div>`;
+      h+='</div>';
+    }
+
+    h+='</div></div></div>';
+  });
+
+  document.getElementById('personas-content').innerHTML=h;
+}
+function psec(title){return`<div class="persona-section"><div class="persona-section-title">${esc(title)}</div>`;}
+
+/* ============ TASK DAG ============ */
+function renderDAG(){
+  const env=DATA[currentEnv],meta=ENV_META[currentEnv];
+  document.getElementById('hdr-dag').innerHTML=`Task DAG <span class="subtitle">${esc(meta.name)}</span>`;
+  document.getElementById('dag-content').innerHTML=`<div class="md-content full">${md(env.project_dag)}</div>`;
+}
+
+/* ============ RUBRICS ============ */
+function renderRubrics(){
+  const env=DATA[currentEnv],rubrics=env.rubrics||{},meta=ENV_META[currentEnv];
+  let h='';
+
+  document.getElementById('hdr-rubrics').innerHTML=`Rubrics <span class="subtitle">${esc(meta.name)}</span>`;
+
+  // Scoring scale
+  const scale=rubrics.scoring_scale;
+  if(scale){
+    h+='<div class="card"><div class="card-title"><div class="dot" style="background:var(--orange)"></div>SCORING SCALE (1&ndash;5)</div>';
+    h+='<div class="metrics-row">';
+    const sColors={1:'var(--red)',2:'var(--orange)',3:'var(--amber)',4:'var(--blue)',5:'var(--green)'};
+    for(const[score,desc]of Object.entries(scale)){
+      h+=`<div class="metric-box"><div class="metric-val" style="color:${sColors[score]||'var(--g700)'}">${score}</div><div style="font-size:11px;color:var(--g600);margin-top:4px">${esc(desc)}</div></div>`;
+    }
+    h+='</div></div>';
+  }
+
+  // Per-task rubrics
+  const taskKeys=Object.keys(rubrics).filter(k=>k!=='scoring_scale');
+  taskKeys.forEach((key,i)=>{
+    const task=rubrics[key];
+    const taskNum=(key.match(/^(T\d+)/)||['',''])[1];
+    const taskName=key.replace(/^T\d+_/,'').replace(/_/g,' ');
+    const id='rub-'+i;
+    const nC=(task.programmatic_checks||[]).length;
+    const nR=(task.rubric_criteria||[]).length;
+
+    h+='<div class="rsection">';
+    h+=`<div class="rsection-header" onclick="toggle('${id}')">`;
+    h+=`<h3><span style="color:var(--orange);font-family:'SF Mono',Menlo,monospace;margin-right:8px">${esc(taskNum)}</span>${esc(taskName)}</h3>`;
+    if(nC)h+=`<span class="badge badge-info">${nC} checks</span>`;
+    if(nR)h+=`<span class="badge badge-purple">${nR} criteria</span>`;
+    h+=`<span class="chevron-toggle" id="${id}-ch">&#9660;</span>`;
+    h+='</div>';
+
+    h+=`<div class="collapsible" id="${id}" style="max-height:0">`;
+
+    // Programmatic checks
+    if(task.programmatic_checks&&task.programmatic_checks.length){
+      h+='<div style="padding:10px 20px;font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--g200);background:var(--blue-bg)">Programmatic Checks</div>';
+      task.programmatic_checks.forEach(check=>{
+        const typeIcon=check.type==='boolean'?'&#9745;':check.type==='checklist'?'&#9776;':'&#8776;';
+        h+='<div class="rrow">';
+        h+=`<div class="ci" style="background:var(--blue-bg);color:var(--blue)">${typeIcon}</div>`;
+        h+=`<div class="ct"><strong>${esc(check.name||'')}</strong><div style="font-size:12px;color:var(--g500);margin-top:2px">${esc(check.description||'')}</div>`;
+        if(check.items&&check.items.length){
+          h+='<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">';
+          check.items.forEach(item=>{h+=`<span class="badge badge-info">${esc(String(item).replace(/_/g,' '))}</span>`;});
+          h+='</div>';
+        }
+        h+=`</div><div class="cs">${esc(check.type||'')}</div></div>`;
+      });
+    }
+
+    // Rubric criteria
+    if(task.rubric_criteria&&task.rubric_criteria.length){
+      h+='<div style="padding:10px 20px;font-size:11px;font-weight:700;color:var(--g500);text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--g200);border-top:1px solid var(--g200);background:var(--purple-bg)">Rubric Criteria</div>';
+      task.rubric_criteria.forEach(crit=>{
+        h+='<div class="dim-item">';
+        h+=`<div class="dim-top"><span class="dim-name">${esc(crit.name||'')}</span><span class="badge badge-purple">${esc(crit.dimension||'')}</span></div>`;
+        h+=`<div class="dim-reason">${esc(crit.description||'')}</div>`;
+        if(crit.scoring){
+          const sColors={1:'var(--red)',2:'var(--orange)',3:'var(--amber)',4:'var(--blue)',5:'var(--green)'};
+          h+='<div class="score-guide">';
+          for(const[score,guide]of Object.entries(crit.scoring)){
+            h+=`<div class="score-card"><div class="sc-num" style="color:${sColors[score]||'var(--g700)'}">${score}</div><div class="sc-desc">${esc(guide)}</div></div>`;
+          }
+          h+='</div>';
+        }
+        h+='</div>';
+      });
+    }
+
+    h+='</div></div>';
+  });
+
+  document.getElementById('rubrics-content').innerHTML=h;
+}
+
+/* ============ VERIFIERS ============ */
+function renderVerifiers(){
+  const env=DATA[currentEnv],meta=ENV_META[currentEnv];
+  document.getElementById('hdr-verifiers').innerHTML=`Verifiers <span class="subtitle">${esc(meta.name)}</span>`;
+
+  const code=env.verifiers_code||'';
+  // Basic Python syntax highlighting
+  let highlighted=esc(code);
+  // Comments
+  highlighted=highlighted.replace(/(#[^\n]*)/g,'<span class="cm">$1</span>');
+  // Strings (triple-quoted first, then single/double)
+  highlighted=highlighted.replace(/(&#34;&#34;&#34;[\s\S]*?&#34;&#34;&#34;|&#39;&#39;&#39;[\s\S]*?&#39;&#39;&#39;)/g,'<span class="st">$1</span>');
+  highlighted=highlighted.replace(/(f?&#34;(?:[^&#]|&[^#]|&#[^3]|&#3[^4])*?&#34;)/g,'<span class="st">$1</span>');
+  highlighted=highlighted.replace(/(f?&#39;(?:[^&#]|&[^#]|&#[^3]|&#3[^9])*?&#39;)/g,'<span class="st">$1</span>');
+  // Keywords
+  const kws='import|from|def|class|return|if|elif|else|for|while|in|not|and|or|is|None|True|False|try|except|raise|with|as|pass|break|continue|yield|lambda|assert|finally|global|nonlocal'.split('|');
+  kws.forEach(kw=>{
+    highlighted=highlighted.replace(new RegExp('\\b('+kw+')\\b','g'),'<span class="kw">$1</span>');
+  });
+  // Decorators
+  highlighted=highlighted.replace(/(@\w+)/g,'<span class="dc">$1</span>');
+  // Numbers
+  highlighted=highlighted.replace(/\b(\d+\.?\d*)\b/g,'<span class="nu">$1</span>');
+
+  const lines=code.split('\n').length;
+  let h=`<div style="margin-bottom:16px;display:flex;align-items:center;gap:12px">`;
+  h+=`<span class="badge badge-info badge-lg">${lines} lines</span>`;
+  h+=`<span class="badge badge-warn badge-lg">${(code.length/1024).toFixed(0)} KB</span>`;
+  h+='</div>';
+
+  h+='<div class="code-wrap">';
+  h+='<div class="code-header"><div class="ch-dot" style="background:#FF5F56"></div><div class="ch-dot" style="background:#FFBD2E"></div><div class="ch-dot" style="background:#27C93F"></div><div class="ch-name">verifiers.py</div></div>';
+  h+=`<div class="code-body">${highlighted}</div>`;
+  h+='</div>';
+
+  document.getElementById('verifiers-content').innerHTML=h;
+}
+
+function init(){
+  updateCounts();
+  renderCurrentView();
+}
+</script>
+<script id="edata" type="application/json">__DATA__</script>
+<script>DATA=JSON.parse(document.getElementById('edata').textContent);init();</script>
+</body>
+</html>

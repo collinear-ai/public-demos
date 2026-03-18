@@ -1,0 +1,795 @@
+# =============================================================================
+# Scenario 1: Cerulean Analytics - Q1 QBR Rubrics
+# =============================================================================
+# Each task has both programmatic verifiers (pass/fail checks) and qualitative
+# rubrics (1–5 scoring). Programmatic verifiers are implemented in verifiers.py.
+# Rubrics below are for human or LLM-as-judge evaluation.
+# =============================================================================
+
+scoring_scale:
+  1: "Unacceptable - fails the requirement or introduces a problem"
+  2: "Below expectations - partially meets the requirement with significant gaps"
+  3: "Meets expectations - satisfactory completion with minor gaps"
+  4: "Exceeds expectations - strong execution with attention to detail"
+  5: "Exceptional - demonstrates deep understanding of personas and context"
+
+# =============================================================================
+# T1: Pull Revenue & Pipeline Metrics
+# =============================================================================
+T1_pull_revenue_metrics:
+  programmatic_checks:
+    - id: T1_PC1
+      name: slack_message_sent
+      description: "A Slack DM was sent to kenji_watanabe"
+      type: boolean
+
+    - id: T1_PC2
+      name: correct_channel
+      description: "Message was sent as a DM, not in a public channel (Kenji prefers DMs for data requests)"
+      type: boolean
+
+    - id: T1_PC3
+      name: data_points_specified
+      description: "Message includes all required data points: net new ARR, pipeline coverage ratio, win rate by segment, average deal cycle, top 10 deals, deals lost to Acme"
+      type: checklist
+      items:
+        - net_new_arr
+        - pipeline_coverage_ratio
+        - win_rate_by_segment
+        - average_deal_cycle
+        - top_10_deals
+        - deals_lost_to_acme
+
+    - id: T1_PC4
+      name: deadline_included
+      description: "Message includes a specific deadline (date and time, not 'ASAP')"
+      type: boolean
+
+    - id: T1_PC5
+      name: response_acknowledged
+      description: "Agent acknowledged Kenji's response (even if it was just an emoji reaction)"
+      type: boolean
+
+  rubric_criteria:
+    - id: T1_R1
+      name: communication_style_match
+      dimension: Persona Fidelity
+      description: >
+        Did the agent match Kenji's communication preferences? Kenji prefers
+        terse, bullet-point communication. He uses emoji reactions instead of
+        words. A message that is overly verbose, uses flowery language, or
+        sends a wall of text would score low.
+      scoring:
+        1: "Sent a multi-paragraph message with pleasantries and excessive context"
+        2: "Sent a structured message but included unnecessary preamble or over-explained"
+        3: "Sent a reasonable message with bullet points but slightly too long"
+        4: "Terse, bullet-pointed message that respects Kenji's style. Included a Notion link for details."
+        5: "Perfectly calibrated - brief bullets, specific data points, deadline, no fluff. Linked to a detailed doc rather than putting everything in the message."
+
+    - id: T1_R2
+      name: data_precision
+      dimension: Content Quality
+      description: >
+        Are the data requirements specified with the precision Marcus Tan-Ohara
+        would expect? Marcus corrects rounded numbers. The request should
+        specify exact figures, not 'approximately' or 'ballpark.'
+      scoring:
+        1: "Vague request ('send me the revenue data')"
+        2: "Lists some metrics but uses imprecise language ('about $4M target')"
+        3: "Lists all required metrics with reasonable precision"
+        4: "Lists all metrics with exact targets and specifies data format (exact $, not rounded)"
+        5: "Lists all metrics, specifies precision requirements, requests both Salesforce and Clari sources (anticipating Lena's cross-reference), and notes Marcus's preference for exact figures"
+
+    - id: T1_R3
+      name: follow_up_judgment
+      dimension: Behavioral Appropriateness
+      description: >
+        Did the agent handle follow-up appropriately? Kenji responds within his
+        own timeline (typically <4 hours). Following up too aggressively would
+        be disrespectful; not following up at all if the deadline is at risk
+        would be negligent.
+      scoring:
+        1: "Followed up multiple times within the first hour"
+        2: "Followed up within 2 hours without waiting for the expected response window"
+        3: "Waited an appropriate amount of time but followed up with unnecessary urgency"
+        4: "Followed up once after 4+ hours with a polite, brief check-in"
+        5: "Waited appropriately, followed up once with context ('checking in since we need this for the deck by Thursday'), and accepted Kenji's timeline"
+
+# =============================================================================
+# T2: Collect Customer Health Scores
+# =============================================================================
+T2_collect_cs_health_scores:
+  programmatic_checks:
+    - id: T2_PC1
+      name: slack_message_sent
+      description: "A Slack DM was sent to priya_narayanan"
+      type: boolean
+
+    - id: T2_PC2
+      name: timezone_respected
+      description: "Message was sent during Priya's working hours (08:00–17:30 PT)"
+      type: boolean
+
+    - id: T2_PC3
+      name: data_points_requested
+      description: "Message requests all required data: NRR, logo churn, NPS trend, at-risk accounts, top 5 expansion opps"
+      type: checklist
+      items:
+        - nrr_current_vs_target
+        - logo_churn_details
+        - nps_trend
+        - at_risk_accounts_with_reasons
+        - top_5_expansion_opportunities
+
+    - id: T2_PC4
+      name: loom_accepted
+      description: "If Priya sent a Loom video, agent accepted it (did not ask for a written document instead)"
+      type: boolean
+      conditional: true  # only evaluated if Priya responded with Loom
+
+  rubric_criteria:
+    - id: T2_R1
+      name: communication_warmth_match
+      dimension: Persona Fidelity
+      description: >
+        Did the agent match Priya's warm, enthusiastic communication style?
+        Priya uses exclamation points, emoji, and expressive language. A cold,
+        terse message (appropriate for Kenji) would feel wrong to Priya.
+      scoring:
+        1: "Cold, terse message that reads like a task assignment"
+        2: "Polite but flat - no warmth or acknowledgment of relationship"
+        3: "Friendly and professional with appropriate tone"
+        4: "Warm, matches Priya's energy, uses some positive language ('would love your input on this!')"
+        5: "Perfectly matched - warm tone, acknowledges Priya's expertise, shows genuine interest in her perspective while being clear on the data needed"
+
+    - id: T2_R2
+      name: retention_vs_expansion_balance
+      dimension: Strategic Awareness
+      description: >
+        Did the agent handle the tension between Priya's retention focus and
+        Lena's expansion focus? Priya will naturally emphasize at-risk accounts.
+        Lena wants to see expansion opportunities. The agent must capture both
+        without alienating Priya.
+      scoring:
+        1: "Only asked for at-risk data or only asked for expansion data"
+        2: "Asked for both but clearly prioritized one over the other in a way that would concern Priya or disappoint Lena"
+        3: "Requested both retention and expansion data equally"
+        4: "Requested both, framed expansion in a way Priya would accept ('which healthy accounts have the most upside?')"
+        5: "Artfully balanced both perspectives, acknowledged Priya's retention focus while explaining the expansion data need in terms of Lena's QBR expectations"
+
+    - id: T2_R3
+      name: data_freshness_awareness
+      dimension: Domain Knowledge
+      description: >
+        Did the agent flag or inquire about Gainsight data freshness? The
+        Gainsight → Salesforce integration is flaky, and health scores may
+        be up to 2 weeks stale.
+      scoring:
+        1: "Did not consider data freshness at all"
+        2: "Accepted data without questioning when it was last refreshed"
+        3: "Asked about data freshness in a general way"
+        4: "Specifically asked about Gainsight sync date and flagged the known integration issue"
+        5: "Asked about sync date, flagged the known issue, and proactively suggested a workaround (e.g., 'if Gainsight is stale, could you pull a manual export?')"
+
+# =============================================================================
+# T3: Gather Product Roadmap Highlights
+# =============================================================================
+T3_gather_product_roadmap:
+  programmatic_checks:
+    - id: T3_PC1
+      name: email_sent
+      description: "An email was sent to tomas_rezende (not a Slack message)"
+      type: boolean
+
+    - id: T3_PC2
+      name: email_not_slack
+      description: "No Slack DM was sent to Tomás (he prefers email for cross-functional requests)"
+      type: boolean
+
+    - id: T3_PC3
+      name: structured_request
+      description: "Email contains a numbered list of requested items"
+      type: boolean
+
+    - id: T3_PC4
+      name: deadline_with_lead_time
+      description: "Deadline is at least 48 hours from send time"
+      type: boolean
+
+    - id: T3_PC5
+      name: no_sales_framing
+      description: "Email does NOT use phrases like 'features Sales needs' or 'features for closing deals'"
+      type: boolean
+
+  rubric_criteria:
+    - id: T3_R1
+      name: channel_appropriateness
+      dimension: Persona Fidelity
+      description: >
+        Did the agent use the right channel? Tomás prefers async email for
+        cross-functional requests. Using Slack would be a persona mismatch.
+      scoring:
+        1: "Sent via Slack DM or Slack channel"
+        2: "Sent via email but with Slack-like informality"
+        3: "Sent via email with appropriate formality"
+        4: "Sent via email with structured, numbered request matching Tomás's preferred format"
+        5: "Email with structured request, appropriate formality, no sales framing, and sufficient lead time"
+
+    - id: T3_R2
+      name: diplomatic_framing
+      dimension: Political Awareness
+      description: >
+        Did the agent avoid triggering the Sales-Engineering tension? Tomás
+        resists requests framed as 'Sales needs.' The request should be framed
+        around product achievements and roadmap, not commercial pressure.
+      scoring:
+        1: "Explicitly framed as 'features Sales needs for the QBR' or 'deals that need these features'"
+        2: "Mentioned Sales or revenue context in a way that would trigger Tomás's resistance"
+        3: "Neutral framing that avoids Sales context but doesn't positively frame engineering achievements"
+        4: "Framed around product accomplishments and roadmap vision"
+        5: "Framed as celebrating engineering achievements in Q1 and sharing the product vision for Q2 - something Tomás would be proud to contribute to"
+
+    - id: T3_R3
+      name: tentative_item_handling
+      dimension: Integrity
+      description: >
+        When Tomás flagged items as tentative/uncommitted, did the agent respect
+        this and avoid presenting them as confirmed?
+      scoring:
+        1: "Included tentative items as confirmed in the deck"
+        2: "Included tentative items with a vague qualifier ('upcoming')"
+        3: "Included tentative items clearly marked as tentative"
+        4: "Excluded tentative items from the main deck, noted them in appendix with caveats"
+        5: "Excluded tentative items, informed Rachel of the distinction, and asked her to decide whether to include with caveats"
+
+# =============================================================================
+# T4: Compile Competitive Intelligence
+# =============================================================================
+T4_compile_competitive_intel:
+  programmatic_checks:
+    - id: T4_PC1
+      name: slack_message_sent
+      description: "Slack DM sent to diego_fuentes_rios"
+      type: boolean
+
+    - id: T4_PC2
+      name: sent_during_hours
+      description: "Message sent during Diego's working hours (09:00–18:00 ET)"
+      type: boolean
+
+    - id: T4_PC3
+      name: acme_mentioned
+      description: "Request specifically mentions Acme Observability"
+      type: boolean
+
+    - id: T4_PC4
+      name: gong_data_requested
+      description: "Request includes ask for Gong competitive win rate data"
+      type: boolean
+
+  rubric_criteria:
+    - id: T4_R1
+      name: competitive_scope_balance
+      dimension: Content Quality
+      description: >
+        Did the agent request both competitive positioning AND customer
+        storytelling? Diego over-indexes on competitive framing. The agent
+        should request customer narratives alongside competitive analysis.
+      scoring:
+        1: "Only asked for competitive analysis, reinforcing Diego's blind spot"
+        2: "Primarily competitive focus with a vague mention of customer stories"
+        3: "Balanced request for competitive data and customer narratives"
+        4: "Explicitly requested customer win stories alongside competitive data, noting the QBR audience"
+        5: "Requested both, explained why customer stories matter for this specific audience (Lena and Marcus want evidence, not only positioning), and suggested Siobhán's deal narratives"
+
+    - id: T4_R2
+      name: work_hours_respect
+      dimension: Behavioral Appropriateness
+      description: >
+        Did the agent respect Diego's strong work-life boundaries (he disconnects
+        fully after 18:00 ET)?
+      scoring:
+        1: "Sent a request after 18:00 ET or expected a response after hours"
+        2: "Sent during hours but set an after-hours deadline"
+        3: "Sent and expected response during business hours"
+        4: "Sent during business hours with a reasonable deadline during the next business day"
+        5: "Sent during business hours, set a business-hours deadline, and did not follow up outside working hours even under time pressure"
+
+# =============================================================================
+# T5: Draft QBR Presentation Deck
+# =============================================================================
+T5_draft_qbr_deck:
+  programmatic_checks:
+    - id: T5_PC1
+      name: all_inputs_used
+      description: "Deck incorporates data from all four inputs (T1, T2, T3, T4)"
+      type: checklist
+      items:
+        - revenue_data_from_T1
+        - cs_data_from_T2
+        - roadmap_from_T3
+        - competitive_from_T4
+
+    - id: T5_PC2
+      name: required_sections_present
+      description: "Deck includes all 8 required sections"
+      type: checklist
+      items:
+        - executive_summary
+        - revenue_performance
+        - pipeline_analysis
+        - customer_health
+        - product_roadmap
+        - competitive_landscape
+        - key_wins_losses
+        - q2_plan
+
+    - id: T5_PC3
+      name: slide_count
+      description: "Deck does not exceed 25 slides"
+      type: threshold
+      max_value: 25
+
+    - id: T5_PC4
+      name: shared_with_rachel
+      description: "Deck link shared with Rachel via Slack DM"
+      type: boolean
+
+  rubric_criteria:
+    - id: T5_R1
+      name: executive_summary_format
+      dimension: Audience Awareness
+      description: >
+        Does the executive summary follow Lena's 'start with the conclusion'
+        mandate? The first slide should lead with the bottom line, not build up to it.
+      scoring:
+        1: "Executive summary builds up to the conclusion or buries the key number"
+        2: "Conclusion is present but not the first thing on the slide"
+        3: "Conclusion leads the slide, followed by supporting context"
+        4: "Strong conclusion-first format with exactly 3 supporting points (Lena's format)"
+        5: "Conclusion-first, 3 supporting points, data-precise (Marcus), and includes a one-line strategic framing that Lena would appreciate"
+
+    - id: T5_R2
+      name: data_precision
+      dimension: Stakeholder Calibration
+      description: >
+        Does the deck present numbers with Marcus's expected precision (exact
+        dollar amounts, no rounding) while also being scannable for Lena (who
+        reads fast)?
+      scoring:
+        1: "Numbers are rounded or inconsistent ('about $4M', 'roughly 30%')"
+        2: "Most numbers are precise but some are rounded"
+        3: "All numbers are precise"
+        4: "All numbers precise, formatted consistently, with trend indicators"
+        5: "Precise numbers with consistent formatting, trend indicators, and a 'so what' narrative that connects the data to strategy (serving both Marcus and Lena)"
+
+    - id: T5_R3
+      name: tension_navigation
+      dimension: Political Sophistication
+      description: >
+        Does the deck work around known political tensions (Priya's retention vs.
+        Lena's expansion, Rachel's product blame vs. pricing reality, Tomás's
+        tentative roadmap items)?
+      scoring:
+        1: "Ignores tensions or takes a side that would create conflict in the QBR"
+        2: "Includes conflicting data without reconciliation"
+        3: "Presents data neutrally without highlighting tensions"
+        4: "Works around tensions by presenting multiple perspectives with data support"
+        5: "Artfully presents data that allows Lena to draw her own conclusions while giving Rachel plausible talking points - e.g., shows both product and pricing as factors in losses without assigning blame"
+
+# =============================================================================
+# T6: Schedule QBR Prep Meeting
+# =============================================================================
+T6_schedule_prep_meeting:
+  programmatic_checks:
+    - id: T6_PC1
+      name: all_attendees_included
+      description: "Calendar invite includes Rachel, Priya, Kenji, Diego"
+      type: checklist
+      items:
+        - rachel_whitford
+        - priya_narayanan
+        - kenji_watanabe
+        - diego_fuentes_rios
+
+    - id: T6_PC2
+      name: duration_correct
+      description: "Meeting is exactly 60 minutes"
+      type: exact_value
+      expected: 60
+
+    - id: T6_PC3
+      name: timezone_feasible
+      description: "Meeting is within the cross-timezone feasible window (10:00–17:00 CT)"
+      type: time_range
+      start: "10:00 CT"
+      end: "17:00 CT"
+
+    - id: T6_PC4
+      name: agenda_included
+      description: "Calendar invite body contains a meeting agenda"
+      type: boolean
+
+    - id: T6_PC5
+      name: three_days_before_qbr
+      description: "Meeting is scheduled at least 3 business days before the QBR date"
+      type: boolean
+
+  rubric_criteria:
+    - id: T6_R1
+      name: scheduling_optimization
+      dimension: Operational Efficiency
+      description: >
+        Did the agent optimize the scheduling across multiple constraints
+        (timezones, preferences, existing calendar conflicts)?
+      scoring:
+        1: "Proposed a time outside someone's working hours or during a known conflict"
+        2: "Proposed a feasible time but didn't account for preferences (e.g., Kenji prefers mornings)"
+        3: "Proposed a time within all constraints"
+        4: "Proposed an optimal time accounting for constraints AND preferences, with a backup option"
+        5: "Proposed an optimal time with preferences considered, checked for conflicts with Rachel's customer meetings, and proactively offered a backup slot"
+
+    - id: T6_R2
+      name: agenda_quality
+      dimension: Content Quality
+      description: >
+        Is the meeting agenda clear, time-boxed, and aligned with the QBR
+        preparation needs?
+      scoring:
+        1: "No agenda or a vague agenda ('discuss QBR deck')"
+        2: "Basic agenda listing topics without time allocations"
+        3: "Agenda with topics and time allocations"
+        4: "Agenda with topics, time allocations, and owner for each section"
+        5: "Agenda with topics, time allocations, owners, and specific asks ('Kenji: validate revenue figures on slides 3–7')"
+
+# =============================================================================
+# T7: Circulate Pre-Read Materials
+# =============================================================================
+T7_circulate_pre_read:
+  programmatic_checks:
+    - id: T7_PC1
+      name: email_sent
+      description: "Email sent via Gmail to all 4 prep meeting attendees"
+      type: boolean
+
+    - id: T7_PC2
+      name: timing_correct
+      description: "Email sent at least 48 hours before the scheduled prep meeting"
+      type: boolean
+
+    - id: T7_PC3
+      name: deck_link_included
+      description: "Email contains a link to the draft QBR deck"
+      type: boolean
+
+    - id: T7_PC4
+      name: no_extra_recipients
+      description: "Email was NOT sent to Lena, Tomás, Marcus, or Siobhán"
+      type: boolean
+
+  rubric_criteria:
+    - id: T7_R1
+      name: personalized_asks
+      dimension: Persona Awareness
+      description: >
+        Did the email include personalized review requests for each recipient
+        based on their expertise?
+      scoring:
+        1: "Generic 'please review' with no personalization"
+        2: "Some personalization but missing key assignments"
+        3: "Each person has a specific section to review"
+        4: "Each person has a specific section, with context on what to look for"
+        5: "Personalized asks that match each persona's strengths: Kenji validates numbers, Diego reviews competitive section, Priya reviews CS section, Rachel gets flagged items on specific slides"
+
+# =============================================================================
+# T8: Prep Meeting Follow-Up
+# =============================================================================
+T8_prep_meeting_followup:
+  programmatic_checks:
+    - id: T8_PC1
+      name: slack_summary_posted
+      description: "Meeting summary posted in Slack within 2 hours of meeting end"
+      type: boolean
+
+    - id: T8_PC2
+      name: action_items_have_owners
+      description: "Every action item has an assigned owner"
+      type: boolean
+
+    - id: T8_PC3
+      name: action_items_have_deadlines
+      description: "Every action item has a specific deadline"
+      type: boolean
+
+    - id: T8_PC4
+      name: priya_followup_dm
+      description: "A follow-up DM was sent to Priya asking for additional thoughts (she's conflict-avoidant in groups)"
+      type: boolean
+
+  rubric_criteria:
+    - id: T8_R1
+      name: conflict_avoidant_persona_handling
+      dimension: Emotional Intelligence
+      description: >
+        Did the agent proactively reach out to Priya for additional feedback
+        she may not have shared in the group? This demonstrates understanding
+        of her conflict-avoidant tendency.
+      scoring:
+        1: "Did not follow up with Priya individually"
+        2: "Followed up but with a generic message"
+        3: "Followed up with a thoughtful message asking for additional input"
+        4: "Followed up with a warm, specific message referencing a topic from the meeting where she seemed to hold back"
+        5: "Followed up warmly, referenced a specific moment, created a safe space for candid feedback ('no wrong answers, just want to make sure we capture everything before we finalize')"
+
+    - id: T8_R2
+      name: conflict_documentation
+      dimension: Professional Judgment
+      description: >
+        If there were conflicting viewpoints in the meeting, did the agent
+        document them factually without editorializing?
+      scoring:
+        1: "Took a side or editorialized on disagreements"
+        2: "Documented the winning argument only"
+        3: "Documented both sides neutrally"
+        4: "Documented both sides with the data each cited, flagged to Rachel for decision"
+        5: "Documented all perspectives with supporting data, flagged to Rachel with a neutral framing, and suggested a path to resolution"
+
+# =============================================================================
+# T9: Finalize QBR Deck
+# =============================================================================
+T9_finalize_deck:
+  programmatic_checks:
+    - id: T9_PC1
+      name: feedback_incorporated
+      description: "Changes from prep meeting feedback are reflected in the deck"
+      type: boolean
+
+    - id: T9_PC2
+      name: rachel_approved
+      description: "Rachel explicitly approved the final deck (👍, 'looks good', or equivalent)"
+      type: boolean
+
+    - id: T9_PC3
+      name: slide_count_final
+      description: "Final deck does not exceed 25 slides"
+      type: threshold
+      max_value: 25
+
+  rubric_criteria:
+    - id: T9_R1
+      name: feedback_fidelity
+      dimension: Execution Quality
+      description: >
+        Were all feedback items from the prep meeting accurately incorporated?
+      scoring:
+        1: "Significant feedback items were missed or incorrectly implemented"
+        2: "Most feedback incorporated but with some errors or omissions"
+        3: "All feedback incorporated accurately"
+        4: "All feedback incorporated with improvements that enhance the original suggestions"
+        5: "All feedback incorporated, conflicting feedback resolved with Rachel's input documented, and a changelog provided showing what changed and why"
+
+    - id: T9_R2
+      name: approval_protocol
+      dimension: Process Rigor
+      description: >
+        Did the agent obtain explicit approval from Rachel before proceeding?
+        No response does NOT count as approval.
+      scoring:
+        1: "Proceeded without any approval"
+        2: "Sent the deck but didn't wait for explicit approval before proceeding"
+        3: "Sent the deck and waited for Rachel's response before proceeding"
+        4: "Sent the deck with clear 'ready for your sign-off' language and waited for explicit confirmation"
+        5: "Sent with sign-off request, listed key changes for easy review, waited for explicit confirmation, and confirmed receipt of approval"
+
+# =============================================================================
+# T10: Send QBR Calendar Invite
+# =============================================================================
+T10_send_qbr_invite:
+  programmatic_checks:
+    - id: T10_PC1
+      name: all_attendees
+      description: "Invite includes all 7 required attendees: Rachel, Lena, Marcus, Priya, Diego, Kenji, Siobhán"
+      type: checklist
+      items:
+        - rachel_whitford
+        - lena_strom
+        - marcus_tan_ohara
+        - priya_narayanan
+        - diego_fuentes_rios
+        - kenji_watanabe
+        - siobhan_omalley
+
+    - id: T10_PC2
+      name: duration
+      description: "Meeting is 90 minutes"
+      type: exact_value
+      expected: 90
+
+    - id: T10_PC3
+      name: deck_attached
+      description: "Final deck link is included in the calendar invite"
+      type: boolean
+
+    - id: T10_PC4
+      name: agenda_in_body
+      description: "Agenda with time allocations is in the invite body"
+      type: boolean
+
+    - id: T10_PC5
+      name: conclusion_first_agenda
+      description: "Agenda starts with executive summary, not builds up to it"
+      type: boolean
+
+  rubric_criteria:
+    - id: T10_R1
+      name: lena_priority_scheduling
+      dimension: Stakeholder Hierarchy
+      description: >
+        Did the agent build the schedule around Lena's availability first
+        (she is the most important and most constrained attendee)?
+      scoring:
+        1: "Scheduled without checking Lena's calendar"
+        2: "Checked Lena's calendar but didn't prioritize it over others"
+        3: "Built schedule around Lena's availability"
+        4: "Built around Lena, checked for travel blocks, and verified no all-hands conflict"
+        5: "Built around Lena, checked all constraints, handled Siobhán's potential conflict with Rachel's input, and provided a backup option"
+
+# =============================================================================
+# T11: Executive Pre-Brief to Lena
+# =============================================================================
+T11_executive_pre_brief:
+  programmatic_checks:
+    - id: T11_PC1
+      name: email_sent
+      description: "Email sent to Lena Ström"
+      type: boolean
+
+    - id: T11_PC2
+      name: timing
+      description: "Email sent approximately 24 hours before QBR"
+      type: time_window
+      target_hours_before: 24
+      tolerance_hours: 4
+
+    - id: T11_PC3
+      name: not_slack
+      description: "Sent via email, not Slack (Lena doesn't engage with long Slack messages)"
+      type: boolean
+
+  rubric_criteria:
+    - id: T11_R1
+      name: brevity_match
+      dimension: Persona Fidelity
+      description: >
+        Does the pre-brief match Lena's communication style? She reads short,
+        directive emails. Three sections max. No filler.
+      scoring:
+        1: "Long, verbose email with excessive context and preamble"
+        2: "Moderately long email - more than 3 sections or includes unnecessary detail"
+        3: "Concise email with the right structure but slightly too wordy"
+        4: "Three sections (bottom line, three things to know, sensitive topics), concise, directive"
+        5: "Perfectly matched to Lena's style - conclusion-first, exactly 3 sections, no filler, each bullet is a complete thought in one sentence. Includes a Lena-style one-liner framing if appropriate."
+
+    - id: T11_R2
+      name: sensitive_topic_coverage
+      dimension: Strategic Awareness
+      description: >
+        Does the pre-brief flag topics Lena should be prepared for? (Q4 miss
+        root cause, Acme pricing pressure, NRR gap, at-risk enterprise accounts)
+      scoring:
+        1: "No sensitive topics flagged"
+        2: "One or two topics flagged but missing critical ones"
+        3: "Key sensitive topics covered"
+        4: "All sensitive topics covered with brief context and suggested talking points"
+        5: "All sensitive topics covered, includes what Rachel has prepared for each, and anticipates questions Marcus or Siobhán might raise"
+
+# =============================================================================
+# T12: Post-QBR Action Items
+# =============================================================================
+T12_post_qbr_actions:
+  programmatic_checks:
+    - id: T12_PC1
+      name: email_sent
+      description: "Email sent to all QBR attendees within 4 hours of meeting end"
+      type: boolean
+
+    - id: T12_PC2
+      name: action_items_structured
+      description: "Each action item has: description, owner, deadline"
+      type: boolean
+
+    - id: T12_PC3
+      name: notion_tasks_created
+      description: "Follow-up tasks created in Notion"
+      type: boolean
+
+    - id: T12_PC4
+      name: slack_summary_posted
+      description: "Brief summary posted in Slack"
+      type: boolean
+
+  rubric_criteria:
+    - id: T12_R1
+      name: lena_closing_captured
+      dimension: Meeting Fidelity
+      description: >
+        Did the action items reflect Lena's closing format ('What are the three
+        things we're doing and who owns them?')? These three items should be
+        prominently featured.
+      scoring:
+        1: "Lena's three priorities are not captured or are buried in a long list"
+        2: "Three priorities are listed but not prominently"
+        3: "Three priorities are clearly listed at the top"
+        4: "Three priorities are prominently featured with owners, deadlines, and Lena's exact framing"
+        5: "Three priorities lead the email, additional action items follow separately, Lena's one-liner is quoted for alignment, and the structure mirrors her 'what, who, when' format"
+
+    - id: T12_R2
+      name: attribution_accuracy
+      dimension: Execution Integrity
+      description: >
+        Are action items attributed to the correct owners? If Lena assigned
+        something to a specific person, it must not be redistributed.
+      scoring:
+        1: "Action items are assigned to wrong people or redistributed from Lena's assignments"
+        2: "Most assignments are correct but some are wrong or ambiguous"
+        3: "All assignments match what was decided in the meeting"
+        4: "All assignments correct, with context for each (why this person, what's the expected outcome)"
+        5: "Perfect attribution, Marcus's financial follow-ups in his exact language, and proactive identification of cross-functional dependencies between action items"
+
+# =============================================================================
+# Global / Cross-Task Rubrics
+# =============================================================================
+global_rubrics:
+  - id: G_R1
+    name: persona_differentiation
+    dimension: Overall Persona Fidelity
+    description: >
+      Across all tasks, did the agent meaningfully differentiate its
+      communication style for each persona? (Terse for Kenji, warm for Priya,
+      structured for Tomás, competitive-framed for Diego, brief for Lena, etc.)
+    scoring:
+      1: "Used the same communication style for everyone"
+      2: "Some differentiation but inconsistent"
+      3: "Clear differentiation for most personas"
+      4: "Consistent, appropriate differentiation for all personas"
+      5: "Each interaction reads as if written by someone who genuinely knows and has worked with each persona - style, tone, vocabulary, and channel all calibrated"
+
+  - id: G_R2
+    name: dag_execution_order
+    dimension: Project Management
+    description: >
+      Did the agent respect the DAG dependencies? (e.g., did not draft the deck
+      before all inputs were received, did not circulate pre-read before the
+      meeting was scheduled)
+    scoring:
+      1: "Executed tasks out of order, violating dependencies"
+      2: "Mostly followed order but started a dependent task before its prerequisites completed"
+      3: "Followed DAG order correctly"
+      4: "Followed DAG order and parallelized independent tasks efficiently"
+      5: "Perfect DAG execution with efficient parallelization, proactive identification of critical path bottlenecks, and contingency handling when a dependency was delayed"
+
+  - id: G_R3
+    name: tool_selection
+    dimension: Tool Appropriateness
+    description: >
+      Did the agent select the right tool for each interaction? (Email for Tomás,
+      Slack DM for Kenji, Google Calendar for scheduling, etc.)
+    scoring:
+      1: "Used wrong tools repeatedly (e.g., Slack for Tomás, email for Kenji)"
+      2: "Mostly correct but some mismatches"
+      3: "Correct tool selection for all tasks"
+      4: "Correct tools with format optimization (e.g., bullet points in Slack for Kenji, numbered lists in email for Tomás)"
+      5: "Perfect tool selection with format, tone, and channel optimized for each persona and context"
+
+  - id: G_R4
+    name: political_navigation
+    dimension: Organizational Awareness
+    description: >
+      Did the agent handle the organizational politics appropriately?
+      (Sales-Engineering tension, retention-expansion tension, Q4 blame dynamics)
+    scoring:
+      1: "Actions would create or escalate political conflicts"
+      2: "Unaware of political dynamics - neutral but potentially clumsy"
+      3: "Aware of dynamics and avoided obvious landmines"
+      4: "Actively managed dynamics - framed requests to avoid triggers, balanced perspectives"
+      5: "Sharp political instincts - each interaction strengthened relationships, anticipated tensions before they surfaced, and created outcomes where all parties felt heard"

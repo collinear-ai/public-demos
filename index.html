@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Collinear AI — Demos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --orange:#ee8443;
+    --orange-light:#f5a66e;
+    --ecru:#F5F0E8;
+    --beige:#D4CCBC;
+    --dark:#2c2c2c;
+    --black:#1a1a1a;
+    --accent:#9DA8A0;
+    --radius:16px;
+  }
+  html{scroll-behavior:smooth}
+  body{
+    font-family:'Archivo',system-ui,-apple-system,sans-serif;
+    background:var(--ecru);
+    color:var(--dark);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ── NAV ── */
+  nav{
+    position:fixed;top:0;left:0;right:0;z-index:100;
+    background:rgba(245,240,232,.85);
+    backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+    border-bottom:1px solid rgba(44,44,44,.06);
+    transition:box-shadow .3s;
+  }
+  nav.scrolled{box-shadow:0 2px 24px rgba(0,0,0,.06)}
+  .nav-inner{
+    max-width:1200px;margin:0 auto;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 32px;
+  }
+  .nav-logo{height:32px;width:auto}
+  .nav-links{display:flex;gap:32px;align-items:center}
+  .nav-links a{
+    font-size:14px;font-weight:600;color:var(--dark);
+    text-decoration:none;letter-spacing:-.02em;
+    transition:color .2s;
+  }
+  .nav-links a:hover{color:var(--orange)}
+  .nav-cta{
+    background:var(--orange);color:#fff;
+    padding:10px 24px;border-radius:999px;
+    font-size:14px;font-weight:700;text-decoration:none;
+    transition:transform .2s,box-shadow .2s;
+    letter-spacing:-.02em;
+  }
+  .nav-cta:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(238,132,67,.35)}
+
+  /* ── HERO ── */
+  .hero{
+    padding:160px 32px 100px;
+    max-width:1200px;margin:0 auto;
+    display:grid;grid-template-columns:1fr 1fr;gap:60px;
+    align-items:center;
+  }
+  .hero-text h1{
+    font-size:clamp(40px,5vw,64px);
+    font-weight:700;line-height:1.05;
+    letter-spacing:-.04em;color:var(--dark);
+    margin-bottom:24px;
+  }
+  .hero-text h1 span{color:var(--orange)}
+  .hero-text p{
+    font-size:18px;line-height:1.6;
+    color:#666;max-width:480px;
+    margin-bottom:40px;
+  }
+  .hero-cta{
+    display:inline-flex;align-items:center;gap:8px;
+    background:var(--dark);color:#fff;
+    padding:16px 32px;border-radius:999px;
+    font-size:16px;font-weight:600;text-decoration:none;
+    transition:transform .2s,box-shadow .2s;
+    letter-spacing:-.02em;
+  }
+  .hero-cta:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(44,44,44,.25)}
+  .hero-cta svg{width:20px;height:20px;transition:transform .2s}
+  .hero-cta:hover svg{transform:translateX(3px)}
+
+  .hero-visual{
+    position:relative;display:flex;
+    align-items:center;justify-content:center;
+  }
+  .hero-ring{
+    width:100%;max-width:420px;aspect-ratio:1;
+    border-radius:50%;
+    background:conic-gradient(from 180deg,var(--orange),var(--orange-light),var(--ecru),var(--beige),var(--orange));
+    animation:spin 30s linear infinite;
+    position:relative;
+  }
+  .hero-ring::after{
+    content:'';position:absolute;
+    inset:12%;border-radius:50%;
+    background:var(--ecru);
+  }
+  .hero-logomark{
+    position:absolute;z-index:2;
+    width:100px;height:100px;
+    filter:drop-shadow(0 8px 30px rgba(238,132,67,.3));
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ── DEMOS GRID ── */
+  .demos-section{
+    padding:80px 32px 120px;
+    max-width:1200px;margin:0 auto;
+  }
+  .section-label{
+    font-size:13px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.12em;
+    color:var(--orange);margin-bottom:12px;
+  }
+  .section-title{
+    font-size:clamp(28px,3.5vw,44px);
+    font-weight:700;letter-spacing:-.03em;
+    color:var(--dark);margin-bottom:56px;
+  }
+  .demos-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+    gap:24px;
+  }
+  .demo-card{
+    background:#fff;border-radius:var(--radius);
+    overflow:hidden;
+    border:1px solid rgba(44,44,44,.06);
+    transition:transform .3s cubic-bezier(.23,1,.32,1),box-shadow .3s;
+    text-decoration:none;color:inherit;
+    display:flex;flex-direction:column;
+    cursor:pointer;
+    position:relative;
+  }
+  .demo-card:hover{
+    transform:translateY(-6px);
+    box-shadow:0 20px 60px rgba(0,0,0,.08),0 4px 16px rgba(238,132,67,.08);
+  }
+  .card-visual{
+    height:200px;position:relative;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .card-visual .card-bg{
+    position:absolute;inset:0;
+    opacity:.12;
+  }
+  .card-icon{
+    position:relative;z-index:1;
+    width:64px;height:64px;
+    background:var(--orange);
+    border-radius:16px;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 8px 24px rgba(238,132,67,.25);
+  }
+  .card-icon svg{width:32px;height:32px;color:#fff;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .card-body{padding:28px 28px 32px;flex:1;display:flex;flex-direction:column}
+  .card-tag{
+    display:inline-block;
+    font-size:11px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.1em;
+    color:var(--orange);
+    background:rgba(238,132,67,.08);
+    padding:4px 10px;border-radius:999px;
+    margin-bottom:12px;width:fit-content;
+  }
+  .card-title{
+    font-size:20px;font-weight:700;
+    letter-spacing:-.02em;color:var(--dark);
+    margin-bottom:8px;
+  }
+  .card-desc{
+    font-size:14px;line-height:1.6;color:#888;
+    flex:1;
+  }
+  .card-footer{
+    padding:0 28px 24px;
+    display:flex;align-items:center;gap:8px;
+    font-size:13px;font-weight:600;color:var(--orange);
+  }
+  .card-footer svg{width:16px;height:16px;transition:transform .2s}
+  .demo-card:hover .card-footer svg{transform:translateX(4px)}
+
+  /* ── FOOTER ── */
+  footer{
+    border-top:1px solid rgba(44,44,44,.08);
+    padding:40px 32px;
+    max-width:1200px;margin:0 auto;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  footer .footer-logo{height:24px;opacity:.5}
+  footer p{font-size:13px;color:#999}
+
+  /* ── RESPONSIVE ── */
+  @media(max-width:768px){
+    .hero{grid-template-columns:1fr;padding:120px 24px 60px;gap:40px}
+    .hero-visual{order:-1}
+    .hero-ring{max-width:280px}
+    .hero-logomark{width:70px;height:70px}
+    .demos-grid{grid-template-columns:1fr}
+    .demos-section{padding:60px 24px 80px}
+    .nav-links{display:none}
+    footer{flex-direction:column;gap:16px;text-align:center}
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <div class="nav-inner">
+    <svg class="nav-logo" viewBox="0 0 1062.36 308.12" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#2c2c2c" d="M327.65,175.79c-1.96,2.64-4.73,4.63-8.3,5.95-3.57,1.32-7.8,1.98-12.68,1.98-5.61,0-10.34-1-14.19-3.01-3.85-2-6.75-4.91-8.72-8.72-1.96-3.81-2.95-8.44-2.95-13.89v-3.37c0-5.37.98-9.96,2.95-13.77,1.96-3.81,4.87-6.71,8.72-8.72,3.85-2,8.58-3.01,14.19-3.01,4.65,0,8.72.7,12.2,2.1,3.49,1.4,6.21,3.41,8.18,6.01,1.96,2.61,2.95,5.83,2.95,9.68h19.12c0-7.21-1.81-13.29-5.41-18.22-3.61-4.93-8.6-8.68-14.97-11.24-6.37-2.56-13.69-3.85-21.94-3.85-14.75,0-26.07,3.61-33.97,10.82-7.89,7.21-11.84,17.84-11.84,31.86,0,9.62,1.74,17.59,5.23,23.93,3.49,6.33,8.64,11.06,15.45,14.19,6.81,3.13,15.23,4.69,25.25,4.69h0c8.42,0,15.79-1.28,22.12-3.85,6.33-2.56,11.28-6.29,14.85-11.18,3.57-4.89,5.35-10.9,5.35-18.04h-18.64c0,3.77-.98,6.97-2.95,9.62Z"/>
+      <path fill="#2c2c2c" d="M413.14,136.6c-5.41-2.4-11.92-3.61-19.54-3.61s-14.11,1.2-19.48,3.61c-5.37,2.4-9.48,6.05-12.32,10.94-2.85,4.89-4.27,11.06-4.27,18.52s1.42,13.63,4.27,18.52c2.85,4.89,6.95,8.56,12.32,11,5.37,2.44,11.86,3.67,19.48,3.67s14.13-1.22,19.54-3.67c5.41-2.44,9.54-6.11,12.38-11,2.85-4.89,4.27-11.06,4.27-18.52s-1.42-13.63-4.27-18.52c-2.85-4.89-6.97-8.54-12.38-10.94ZM411.52,167.38c0,4.01-.66,7.38-1.98,10.1-1.32,2.73-3.31,4.81-5.95,6.25-2.65,1.44-5.97,2.16-9.98,2.16s-7.34-.72-9.98-2.16c-2.65-1.44-4.61-3.53-5.89-6.25-1.28-2.72-1.92-6.09-1.92-10.1v-2.52c0-4.01.64-7.4,1.92-10.16,1.28-2.76,3.25-4.85,5.89-6.25,2.65-1.4,5.97-2.1,9.98-2.1s7.34.7,9.98,2.1c2.64,1.4,4.63,3.49,5.95,6.25,1.32,2.77,1.98,6.15,1.98,10.16v2.52Z"/>
+      <rect fill="#2c2c2c" x="439.76" y="110.75" width="17.79" height="87.05"/>
+      <rect fill="#2c2c2c" x="470.42" y="110.75" width="17.8" height="87.05"/>
+      <rect fill="#2c2c2c" x="501.08" y="134.43" width="17.79" height="63.36"/>
+      <rect fill="#2c2c2c" x="501.08" y="110.75" width="17.79" height="14.19"/>
+      <path fill="#2c2c2c" d="M585.42,135.58c-3.57-1.72-7.92-2.59-13.04-2.59-3.13,0-6.15.4-9.08,1.2-2.93.8-5.63,2.02-8.11,3.67-2.49,1.64-4.69,3.75-6.61,6.31h-.96l-1.32-9.74h-14.55v63.36h17.8v-35.11c0-3.04.74-5.69,2.22-7.93,1.48-2.24,3.43-4.03,5.83-5.35,2.4-1.32,5.09-1.98,8.05-1.98,2.01,0,3.81.24,5.41.72,1.6.48,2.96,1.22,4.09,2.22,1.12,1,1.98,2.3,2.58,3.91.6,1.61.9,3.53.9,5.77v37.75h17.8v-40.64c0-5.53-.95-10.08-2.83-13.65-1.89-3.56-4.61-6.21-8.18-7.93Z"/>
+      <path fill="#2c2c2c" d="M660.93,136.53c-5.17-2.36-11.6-3.55-19.06-3.55s-13.87,1.2-19.24,3.61c-5.37,2.41-9.46,6.05-12.27,10.94-2.81,4.89-4.21,11.1-4.21,18.64s1.42,13.75,4.27,18.64c2.84,4.89,6.97,8.52,12.38,10.88,5.41,2.36,11.96,3.55,19.66,3.55h0c5.13,0,9.78-.55,13.95-1.63,4.17-1.08,7.73-2.65,10.7-4.69,2.96-2.04,5.25-4.53,6.85-7.45,1.6-2.92,2.41-6.23,2.41-9.92h-17.8c-.08,1.85-.6,3.45-1.56,4.81-.96,1.36-2.18,2.48-3.67,3.37-1.48.88-3.17,1.54-5.05,1.98-1.88.44-3.75.66-5.59.66-3.93,0-7.21-.58-9.86-1.74-2.65-1.16-4.65-2.95-6.01-5.35-1.36-2.4-2.16-5.45-2.41-9.14h52.18v-4.93c0-7.21-1.32-13.21-3.97-17.97-2.65-4.77-6.55-8.33-11.72-10.7ZM624.56,159.2h0c.4-2.89,1.32-5.33,2.76-7.34,1.44-2,3.43-3.49,5.95-4.45,2.52-.96,5.51-1.44,8.96-1.44,2.33,0,4.43.26,6.31.78,1.88.52,3.52,1.32,4.93,2.4,1.4,1.08,2.51,2.45,3.31,4.09.8,1.64,1.2,3.63,1.2,5.95h-33.43Z"/>
+      <path fill="#2c2c2c" d="M750.44,184.75c-.72-.76-1.08-1.86-1.08-3.31v-27.65c0-4.89-1.2-8.86-3.61-11.9-2.4-3.05-5.91-5.29-10.52-6.73-4.61-1.44-10.12-2.16-17.01-2.16s-12.77.76-17.61,2.28c-4.85,1.52-8.54,3.67-11.06,6.43-2.53,2.76-3.79,6.03-3.79,9.8,0,.4.02.78.06,1.14.04.36.1.7.18,1.02h17.55v-1.32c0-1.36.56-2.5,1.68-3.43,1.12-.92,2.72-1.66,4.81-2.23,2.08-.56,4.61-.84,7.58-.84,3.37,0,6.07.36,8.11,1.08,2.05.72,3.55,1.82,4.51,3.31.96,1.48,1.44,3.31,1.44,5.47v3.61c-7.14,0-13.65.24-19.54.72-5.89.48-11,1.46-15.33,2.95-4.33,1.48-7.68,3.67-10.04,6.55-2.36,2.89-3.55,6.69-3.55,11.42,0,3.69.68,6.73,2.05,9.14,1.36,2.41,3.19,4.27,5.47,5.59,2.28,1.32,4.85,2.24,7.7,2.77,2.84.52,5.75.78,8.72.78h0c3.68,0,7.09-.36,10.22-1.08,3.12-.72,5.93-1.78,8.41-3.19,2.49-1.4,4.65-2.98,6.49-4.75h.84c.48,1.68,1.26,3.23,2.34,4.63,1.08,1.4,2.6,2.48,4.57,3.25,1.96.76,4.47,1.14,7.51,1.14,2.48,0,4.71-.26,6.67-.78,1.96-.52,3.43-.94,4.39-1.26v-11.3h-5.17c-1.28,0-2.28-.38-3.01-1.14ZM731.69,173.39c0,2.01-.58,3.81-1.74,5.41-1.16,1.6-2.69,2.94-4.57,4.03-1.88,1.08-3.95,1.92-6.19,2.52-2.25.6-4.49.9-6.73.9-2.09,0-3.99-.22-5.71-.66-1.73-.44-3.09-1.12-4.09-2.05-1-.92-1.5-2.18-1.5-3.79,0-2.48,1.18-4.45,3.55-5.89,2.36-1.44,5.81-2.46,10.34-3.07,4.53-.6,10.08-.9,16.65-.9v3.49Z"/>
+      <path fill="#2c2c2c" d="M797.45,132.99c-2.81,0-5.33.52-7.58,1.56-2.25,1.04-4.13,2.46-5.65,4.27-1.52,1.8-2.72,3.83-3.61,6.07h-.96l-1.32-10.46h-14.55v63.36h17.8v-30.78c0-2.48.32-4.79.96-6.91.64-2.12,1.6-3.97,2.89-5.53,1.28-1.56,2.92-2.76,4.93-3.61,2-.84,4.41-1.26,7.21-1.26h7.09v-15.51c-.88-.32-1.94-.6-3.19-.84-1.24-.24-2.58-.36-4.03-.36Z"/>
+      <path fill="#2c2c2c" d="M866.23,115.2l-36.43,82.6h19.96l6.61-15.63h41.36l6.61,15.63h21.04l-36.43-82.6h-22.72ZM862.62,167.02h0s8.05-19.6,8.05-19.6c.48-1.12,1.08-2.63,1.81-4.51.72-1.88,1.46-3.83,2.22-5.83.76-2,1.42-3.81,1.98-5.41h.84c.24.72.62,1.8,1.14,3.25.52,1.44,1.06,2.97,1.62,4.57.56,1.61,1.12,3.11,1.68,4.51.56,1.4,1,2.54,1.32,3.43l8.18,19.6h-28.86Z"/>
+      <rect fill="#2c2c2c" x="934.04" y="115.19" width="19.36" height="82.6"/>
+      <path fill="#2c2c2c" d="M159.39,132.98h-.09c-12.53.04-21.08,8.77-21.08,20.65,0,11.88,8.55,20.6,21.08,20.65h.09c9.38-.03,16.53-4.93,19.53-12.38h46.22v-16.53h-46.22c-3-7.45-10.15-12.35-19.53-12.38Z"/>
+      <path fill="#ee8443" d="M159.34,84.73h0c-41.93,0-70.56,29.12-70.62,68.77h0s0,.04,0,.06,0,.04,0,.06h0c.06,39.65,28.68,68.78,70.62,68.78v.11c30.63,0,58.28-16.95,65.79-46.85,0,.05-34.15.05-34.15,0-6.36,10.49-19.67,16.74-31.64,16.74v-.11c-22.38,0-38.77-16.3-38.8-38.73.03-22.43,16.43-38.73,38.8-38.73,11.97,0,25.28,6.25,31.64,16.75,0-.05,34.15-.05,34.15,0-7.51-29.9-35.16-46.85-65.79-46.85Z"/>
+    </svg>
+    <div class="nav-links">
+      <a href="#demos">Sample Tasks</a>
+      <a class="nav-cta" href="https://www.collinear.ai/book-a-demo" target="_blank">Book a Demo</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-text">
+    <h1>Interactive <span>Demo</span> Gallery</h1>
+    <p>Explore Collinear AI's capabilities through interactive demonstrations of our training data, RL gyms, and agent evaluation environments.</p>
+    <a href="#demos" class="hero-cta">
+      Explore Sample Tasks
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+  </div>
+  <div class="hero-visual">
+    <div class="hero-ring"></div>
+    <svg class="hero-logomark" viewBox="0 0 296.06 297.89" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#ee8443" d="M151.88,92.79v-43.88c-61.18,0-102.92,42.53-102.92,100.41h46.36c0-32.73,23.92-56.53,56.56-56.53Z"/>
+      <path fill="#2c2c2c" d="M182.66,149.33c0-17.31-12.45-30.03-30.72-30.09h-.13c-18.26.06-30.72,12.78-30.72,30.09,0,17.31,12.46,30.03,30.72,30.09h.13c18.26-.06,30.72-12.79,30.72-30.09Z"/>
+      <path fill="#ee8443" d="M151.88,205.68v43.88c-61.18,0-102.92-42.53-102.92-100.41h46.36c0,32.73,23.92,56.53,56.56,56.53Z"/>
+      <path fill="#ee8443" d="M247.76,117.2c-10.94-43.58-51.24-68.28-95.88-68.28v43.88c17.45,0,36.84,9.11,46.12,24.4,0-.08,49.77-.08,49.77,0Z"/>
+      <path fill="#ee8443" d="M247.76,181.44c-10.94,43.57-51.24,68.28-95.88,68.28v-43.88c17.45,0,36.84-9.11,46.12-24.4,0,.08,49.77.08,49.77,0Z"/>
+      <path fill="#2c2c2c" d="M247.76,137.28h-98.39v24.1h98.39v-24.1Z"/>
+    </svg>
+  </div>
+</section>
+
+<!-- DEMOS -->
+<section class="demos-section" id="demos">
+  <p class="section-label">Interactive Demos</p>
+  <h2 class="section-title">Explore our capabilities</h2>
+  <div class="demos-grid">
+
+    <!-- Knowledge Work Tasks -->
+    <a class="demo-card" href="demos/sample-viewer/index.html">
+      <div class="card-visual" style="background:linear-gradient(135deg,#fef3ec,#fde8d8)">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </div>
+      </div>
+      <div class="card-body">
+        <span class="card-tag">Training Data</span>
+        <h3 class="card-title">Knowledge Work Tasks</h3>
+        <p class="card-desc">21 professional task domains — accounting, law, finance, engineering, nursing, and more. View task instructions, input files, agent outputs, and compare execution trajectories across models.</p>
+      </div>
+      <div class="card-footer">
+        Launch demo
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+    </a>
+
+    <!-- Long-Horizon Tasks -->
+    <a class="demo-card" href="demos/long-horizon-tasks/index.html">
+      <div class="card-visual" style="background:linear-gradient(135deg,#f0efe8,#e8e5d8)">
+        <div class="card-icon" style="background:var(--dark)">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+      </div>
+      <div class="card-body">
+        <span class="card-tag">Evaluation</span>
+        <h3 class="card-title">Long-Horizon Tasks</h3>
+        <p class="card-desc">Multi-day business scenarios with full org charts, persona profiles, and task dependency graphs. Includes a Series C SaaS QBR and a healthcare vendor migration with programmatic verifiers.</p>
+      </div>
+      <div class="card-footer">
+        Launch demo
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+    </a>
+
+    <!-- RL Gym Personal Assistant -->
+    <a class="demo-card" href="demos/rl-gym-personal-assistant/index.html">
+      <div class="card-visual" style="background:linear-gradient(135deg,#ecf2ef,#dce8e1)">
+        <div class="card-icon" style="background:var(--accent)">
+          <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
+      </div>
+      <div class="card-body">
+        <span class="card-tag">RL Gym</span>
+        <h3 class="card-title">Personal Assistant</h3>
+        <p class="card-desc">Persona-driven environment with 10+ simulated tools — banking, calendar, maps, health tracking, WhatsApp, Spotify. See how agents navigate real-life tasks, with full execution traces and scoring.</p>
+      </div>
+      <div class="card-footer">
+        Launch demo
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+    </a>
+
+    <!-- Enterprise Software -->
+    <a class="demo-card" href="demos/rl-gym-visual-explorer/index.html">
+      <div class="card-visual" style="background:linear-gradient(135deg,#f5ede5,#ede3d5)">
+        <div class="card-icon" style="background:#c4a882">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+        </div>
+      </div>
+      <div class="card-body">
+        <span class="card-tag">RL Gym</span>
+        <h3 class="card-title">Enterprise Software Tasks</h3>
+        <p class="card-desc">Specialized enterprise domains — HR recruiting workflows (HRIS, scheduling, offers) and FX financial analysis. Compare model outputs, tool usage traces, and evaluation rubrics side by side.</p>
+      </div>
+      <div class="card-footer">
+        Launch demo
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+    </a>
+
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <svg class="footer-logo" viewBox="0 0 1062.36 308.12" xmlns="http://www.w3.org/2000/svg">
+    <path fill="#2c2c2c" d="M327.65,175.79c-1.96,2.64-4.73,4.63-8.3,5.95-3.57,1.32-7.8,1.98-12.68,1.98-5.61,0-10.34-1-14.19-3.01-3.85-2-6.75-4.91-8.72-8.72-1.96-3.81-2.95-8.44-2.95-13.89v-3.37c0-5.37.98-9.96,2.95-13.77,1.96-3.81,4.87-6.71,8.72-8.72,3.85-2,8.58-3.01,14.19-3.01,4.65,0,8.72.7,12.2,2.1,3.49,1.4,6.21,3.41,8.18,6.01,1.96,2.61,2.95,5.83,2.95,9.68h19.12c0-7.21-1.81-13.29-5.41-18.22-3.61-4.93-8.6-8.68-14.97-11.24-6.37-2.56-13.69-3.85-21.94-3.85-14.75,0-26.07,3.61-33.97,10.82-7.89,7.21-11.84,17.84-11.84,31.86,0,9.62,1.74,17.59,5.23,23.93,3.49,6.33,8.64,11.06,15.45,14.19,6.81,3.13,15.23,4.69,25.25,4.69h0c8.42,0,15.79-1.28,22.12-3.85,6.33-2.56,11.28-6.29,14.85-11.18,3.57-4.89,5.35-10.9,5.35-18.04h-18.64c0,3.77-.98,6.97-2.95,9.62Z"/>
+    <path fill="#2c2c2c" d="M413.14,136.6c-5.41-2.4-11.92-3.61-19.54-3.61s-14.11,1.2-19.48,3.61c-5.37,2.4-9.48,6.05-12.32,10.94-2.85,4.89-4.27,11.06-4.27,18.52s1.42,13.63,4.27,18.52c2.85,4.89,6.95,8.56,12.32,11,5.37,2.44,11.86,3.67,19.48,3.67s14.13-1.22,19.54-3.67c5.41-2.44,9.54-6.11,12.38-11,2.85-4.89,4.27-11.06,4.27-18.52s-1.42-13.63-4.27-18.52c-2.85-4.89-6.97-8.54-12.38-10.94Z"/>
+    <path fill="#2c2c2c" d="M159.39,132.98h-.09c-12.53.04-21.08,8.77-21.08,20.65,0,11.88,8.55,20.6,21.08,20.65h.09c9.38-.03,16.53-4.93,19.53-12.38h46.22v-16.53h-46.22c-3-7.45-10.15-12.35-19.53-12.38Z"/>
+    <path fill="#ee8443" d="M159.34,84.73h0c-41.93,0-70.56,29.12-70.62,68.77h0s0,.04,0,.06,0,.04,0,.06h0c.06,39.65,28.68,68.78,70.62,68.78v.11c30.63,0,58.28-16.95,65.79-46.85,0,.05-34.15.05-34.15,0-6.36,10.49-19.67,16.74-31.64,16.74v-.11c-22.38,0-38.77-16.3-38.8-38.73.03-22.43,16.43-38.73,38.8-38.73,11.97,0,25.28,6.25,31.64,16.75,0-.05,34.15-.05,34.15,0-7.51-29.9-35.16-46.85-65.79-46.85Z"/>
+  </svg>
+  <p>&copy; 2026 Collinear AI. All rights reserved.</p>
+</footer>
+
+<script>
+  // Nav scroll effect
+  const nav = document.getElementById('nav');
+  window.addEventListener('scroll', () => {
+    nav.classList.toggle('scrolled', window.scrollY > 20);
+  });
+</script>
+</body>
+</html>
