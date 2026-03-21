@@ -1150,7 +1150,7 @@ def main():
 
     # Update default env and model
     old_init = "let DATA=null, currentEnv='hr', currentModel='gpt_5_2', currentView='rollouts';"
-    new_init = "let DATA=null, currentEnv='finance', currentModel='opus', currentView='rollouts';"
+    new_init = "let DATA=null, currentEnv='finance', currentModel='grok', currentView='rollouts';"
     new_html = new_html.replace(old_init, new_init)
 
     # Update switchEnv to handle env pill matching (customer_service vs display text)
