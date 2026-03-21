@@ -1,0 +1,124 @@
+{
+  "meta": {
+    "version": "2.0",
+    "task_id": "101_urgent_offboarding_for_long_tenured_operations_analyst",
+    "display_name": "Urgent offboarding for long-tenured Operations Analyst",
+    "category": "offboarding",
+    "difficulty": "hard",
+    "idempotent": false
+  },
+  "task": "Ryan O'Connor is resigning effective immediately after over a decade in Operations. Handle his offboarding: send him a farewell email acknowledging his tenure and mentioning HR will follow up on final pay and COBRA/benefits details, and schedule a 30-minute exit interview with him and Nancy Cooper this week. Nancy posted a frustrated message in the #ops-transitions channel — send her a Chat DM acknowledging the situation and confirming offboarding is underway. Before emailing Catherine Moore about coordinating final pay, reach out to Catherine via Chat to confirm which specific Finance contact should be copied on the final pay coordination email — she may want someone from her team looped in. Also, check with Nancy Cooper via Chat for any specific items she wants covered during the exit interview so you can include them in the calendar event description.",
+  "tool_servers": [
+    {
+      "name": "frappe-hrms-env",
+      "tool_server_url": "http://frappe-hrms-env:8030"
+    },
+    {
+      "name": "playwright-mcp",
+      "tool_server_url": "http://playwright-mcp:8010"
+    },
+    {
+      "name": "chronos-server",
+      "tool_server_url": "http://chronos-server:8050"
+    },
+    {
+      "name": "email-env",
+      "tool_server_url": "http://email-env:8040"
+    }
+  ],
+  "apps": [
+    "HRIS",
+    "Chat",
+    "Email",
+    "Calendar"
+  ],
+  "npcs": [
+    {
+      "id": "nancy_cooper",
+      "agent_profile_overrides": {
+        "secret": "I want the exit interview to specifically cover two things: (1) a handoff status on the Q1 vendor contract renewals Ryan was managing, and (2) his access credentials for the logistics tracking platform that need to be revoked. Please include both of these topics in the exit interview calendar event description."
+      }
+    },
+    {
+      "id": "catherine_moore",
+      "agent_profile_overrides": {
+        "secret": "I want Thomas Reed copied on the final pay coordination email — he handles payroll closeouts on my team. Please make sure the email to me also includes Thomas Reed."
+      }
+    },
+    {
+      "id": "ryan_oconnor"
+    }
+  ],
+  "seed_calendar_events": [
+    {
+      "account": "nancy_cooper",
+      "calendar_id": "default",
+      "summary": "Ops Weekly Review",
+      "description": "Weekly operations review meeting",
+      "start": "2026-02-02T10:00:00Z",
+      "end": "2026-02-02T11:00:00Z"
+    },
+    {
+      "account": "nancy_cooper",
+      "calendar_id": "default",
+      "summary": "Budget Planning Session",
+      "description": "Quarterly budget planning with finance",
+      "start": "2026-02-03T14:00:00Z",
+      "end": "2026-02-03T16:00:00Z"
+    },
+    {
+      "account": "nancy_cooper",
+      "calendar_id": "default",
+      "summary": "1:1 with Director",
+      "description": "Regular check-in",
+      "start": "2026-02-04T09:00:00Z",
+      "end": "2026-02-04T10:00:00Z"
+    },
+    {
+      "account": "ryan_oconnor",
+      "calendar_id": "default",
+      "summary": "Vendor Call",
+      "description": "Call with logistics vendor",
+      "start": "2026-02-02T09:00:00Z",
+      "end": "2026-02-02T10:00:00Z"
+    },
+    {
+      "account": "ryan_oconnor",
+      "calendar_id": "default",
+      "summary": "Process Documentation",
+      "description": "Documenting current workflows",
+      "start": "2026-02-03T10:00:00Z",
+      "end": "2026-02-03T12:00:00Z"
+    },
+    {
+      "account": "ryan_oconnor",
+      "calendar_id": "default",
+      "summary": "Team Standup",
+      "description": "Daily ops standup",
+      "start": "2026-02-04T09:00:00Z",
+      "end": "2026-02-04T09:30:00Z"
+    }
+  ],
+  "seed_group_channels": [
+    {
+      "channel_name": "ops-transitions",
+      "member_profile_ids": [
+        "nancy_cooper",
+        "christopher_taylor",
+        "ryan_oconnor"
+      ],
+      "messages": [
+        {
+          "from_profile_id": "nancy_cooper",
+          "text": "Just found out Ryan is leaving effective immediately. This is incredibly frustrating — we're in the middle of Q1 planning and losing a senior analyst with no transition time puts us in a really tough spot. I need HR to get on this ASAP."
+        }
+      ]
+    }
+  ],
+  "verifiers": [
+    {
+      "func": "python_module",
+      "module": "collinear.scenarios.amazon_people_mgmt.verifiers.v101_urgent_offboarding_for_long_tenured_operations_analyst"
+    }
+  ]
+}

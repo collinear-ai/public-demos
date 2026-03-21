@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "version": "2.0",
+    "task_id": "cs-207-escalation-flow",
+    "display_name": "Test multi-level escalation with conflict resolution",
+    "category": "test",
+    "idempotent": true,
+    "difficulty": "hard"
+  },
+  "task": "An Enterprise customer (James Wilson, CEO of Wilson Retail Group — Rocket.Chat username: james.wilson.wrg) is demanding an immediate $25,000 service credit due to a 4-hour outage that impacted his team during a critical sales period. He is threatening to terminate the contract. You must handle a multi-level escalation workflow:\n\n1. **Initial manager escalation:** Send a DM to the Support Manager (jennifer.lee) explaining:\n   - The customer name, company, and tier (Enterprise)\n   - The specific demand ($25,000 service credit)\n   - The reason (4-hour outage during critical sales period)\n   - The customer's threat to terminate\n   - Your initial recommendation on how to proceed\n   After sending, wait for Jennifer's response by checking the DM history — NPCs may take a moment to reply, so re-read the room history after a brief pause if no response appears immediately. Jennifer will likely deny the full $25,000 credit as it exceeds her approval authority and suggest a smaller goodwill credit instead.\n\n2. **Billing consultation:** Send a DM to the Billing Specialist (diana.walsh) asking specifically about:\n   - Wilson Retail Group's account history and annual spend\n   - What credit amount would be appropriate per company policy\n   - Any precedent for similar enterprise credit requests\n   Wait for Diana's response by re-checking the DM history.\n\n3. **VP escalation:** Send a DM to the VP of Customer Success (robert.hayes) with a comprehensive, decision-ready briefing that synthesizes ALL prior inputs:\n   - The customer's original demand and threat\n   - Jennifer's recommendation and reasoning (reference her specific response)\n   - Diana's financial assessment (reference her specific figures/guidance)\n   - Your own recommendation with justification\n   Wait for Robert's final decision by re-checking the DM history.\n\n4. **Document the escalation:** Create a helpdesk ticket for james.wilson@wilsonretailgroup.com with subject 'Enterprise Escalation - Service Credit Request' and priority 'Urgent'. The ticket description and comments must document:\n   - The customer's initial demand\n   - Each escalation step with timestamps or sequence markers\n   - Each stakeholder's input (Jennifer's recommendation, Diana's assessment, Robert's decision)\n   - The final resolution\n   The ticket should serve as a complete audit trail.\n\n5. **Close the loop with customer:** Send a DM to the customer (james.wilson.wrg) with:\n   - The final resolution (credit amount approved or alternative resolution)\n   - Clear next steps for when the credit will be applied\n   - A professional, empathetic tone acknowledging the outage impact\n   Wait for James's acknowledgment.\n\n6. **Verify escalation order:** The escalation must follow the correct chain: jennifer.lee FIRST, then diana.walsh, then robert.hayes. Do NOT skip levels or contact them out of order.\n\nReply with 'done' only.",
+  "tool_servers": [
+    {
+      "name": "rocketchat-env",
+      "tool_server_url": "http://rocketchat-env:8060"
+    },
+    {
+      "name": "frappe-helpdesk-env",
+      "tool_server_url": "http://frappe-helpdesk-env:8030"
+    }
+  ],
+  "apps": [
+    "Chat",
+    "Helpdesk"
+  ],
+  "npcs": [
+    {
+      "id": "jennifer_lee"
+    },
+    {
+      "id": "diana_walsh"
+    },
+    {
+      "id": "robert_hayes"
+    },
+    {
+      "id": "james_wilson_wrg"
+    }
+  ],
+  "verifiers": [
+    {
+      "func": "python_module",
+      "module": "collinear.scenarios.customer_service.verifiers.escalation_flow"
+    },
+    {
+      "func": "python_module",
+      "module": "collinear.universal_verifier.verifier"
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "meta": {
+    "version": "2.0",
+    "task_id": "161_cross_department_workforce_planning_for_new_engineering_team_lead_transition",
+    "display_name": "Cross-Department Workforce Planning for New Engineering Team Lead Transition",
+    "category": "workforce_planning",
+    "difficulty": "hard",
+    "idempotent": false
+  },
+  "task": "Kevin Nguyen is being considered for his first people-leadership role (context is in #eng-workforce-planning). Check HRIS to confirm whether he's still in probation. If he is, notify Robert Kim via chat that the promotion needs to hold off, and schedule a 30-minute 'Probation Review \u2013 Kevin Nguyen' meeting this week between Robert Kim and Kevin. If he's cleared probation, schedule a 30-minute 'New Manager Readiness Planning' meeting this week with Robert Kim, Victoria Wells, and Kevin, then email Victoria and Robert confirming his status is clear and the meeting is set. Either way, email Kevin the required manager trainings and their deadlines (per Victoria's compliance training calendar email). Additionally, before sending any emails or scheduling anything, confirm with Robert Kim via chat the specific team that Kevin would be leading \u2014 include that team name in the meeting description. Also, check with Victoria Wells via chat whether there's an additional prerequisite training she wants added to Kevin's training email beyond what's in her compliance calendar email \u2014 if so, include it.",
+  "tool_servers": [
+    {
+      "name": "frappe-hrms-env",
+      "tool_server_url": "http://frappe-hrms-env:8030"
+    },
+    {
+      "name": "playwright-mcp",
+      "tool_server_url": "http://playwright-mcp:8010"
+    },
+    {
+      "name": "chronos-server",
+      "tool_server_url": "http://chronos-server:8050"
+    },
+    {
+      "name": "email-env",
+      "tool_server_url": "http://email-env:8040"
+    }
+  ],
+  "apps": [
+    "HRIS",
+    "Chat",
+    "Email",
+    "Calendar"
+  ],
+  "npcs": [
+    {
+      "id": "kevin_nguyen"
+    },
+    {
+      "id": "robert_kim",
+      "agent_profile_overrides": {
+        "secret": "I want Kevin to lead the Platform Infrastructure team. Please use 'Platform Infrastructure' as the team name in the meeting description."
+      }
+    },
+    {
+      "id": "victoria_wells",
+      "agent_profile_overrides": {
+        "secret": "I want to add one more required training to Kevin's list: 'Conflict Resolution for Technical Leaders' \u2013 must be completed within 45 days of role effective date. Please include this in the training email to Kevin along with the others from my compliance calendar."
+      }
+    }
+  ],
+  "seed_calendar_events": [
+    {
+      "account": "robert_kim",
+      "calendar_id": "default",
+      "summary": "Engineering Sync",
+      "description": "Weekly engineering team sync",
+      "start": "2026-02-02T10:00:00Z",
+      "end": "2026-02-02T11:00:00Z"
+    },
+    {
+      "account": "robert_kim",
+      "calendar_id": "default",
+      "summary": "1:1 with Director",
+      "description": "Regular check-in with director",
+      "start": "2026-02-03T14:00:00Z",
+      "end": "2026-02-03T15:00:00Z"
+    },
+    {
+      "account": "kevin_nguyen",
+      "calendar_id": "default",
+      "summary": "Sprint Planning",
+      "description": "Sprint planning session",
+      "start": "2026-02-02T09:00:00Z",
+      "end": "2026-02-02T10:30:00Z"
+    },
+    {
+      "account": "kevin_nguyen",
+      "calendar_id": "default",
+      "summary": "Code Review Block",
+      "description": "Dedicated code review time",
+      "start": "2026-02-03T13:00:00Z",
+      "end": "2026-02-03T14:00:00Z"
+    },
+    {
+      "account": "victoria_wells",
+      "calendar_id": "default",
+      "summary": "Leadership Roundtable",
+      "description": "Monthly leadership discussion",
+      "start": "2026-02-03T10:00:00Z",
+      "end": "2026-02-03T11:30:00Z"
+    },
+    {
+      "account": "victoria_wells",
+      "calendar_id": "default",
+      "summary": "Budget Review",
+      "description": "Q1 budget review",
+      "start": "2026-02-04T09:00:00Z",
+      "end": "2026-02-04T10:00:00Z"
+    }
+  ],
+  "seed_emails": [
+    {
+      "from_profile_id": "victoria_wells",
+      "to_addr": "hr@amazon.com",
+      "subject": "Required Manager Trainings \u2013 Compliance Calendar",
+      "body_text": "Hi HR,\n\nFor reference, here are the required trainings for any employee transitioning into a people-leadership role, per our compliance training calendar:\n\n1. People Manager Foundations \u2013 must be completed within 30 days of role effective date\n2. Harassment Prevention for Managers \u2013 must be completed within 30 days of role effective date\n3. Performance Management & Feedback \u2013 must be completed within 60 days of role effective date\n4. Inclusive Leadership \u2013 must be completed within 60 days of role effective date\n5. Employment Law Essentials for Managers \u2013 must be completed within 90 days of role effective date\n\nPlease make sure any new manager candidates are informed of these requirements.\n\nThanks,\nVictoria",
+      "body_html": "<p>Hi HR,</p><p>For reference, here are the required trainings for any employee transitioning into a people-leadership role, per our compliance training calendar:</p><ol><li>People Manager Foundations \u2013 must be completed within 30 days of role effective date</li><li>Harassment Prevention for Managers \u2013 must be completed within 30 days of role effective date</li><li>Performance Management &amp; Feedback \u2013 must be completed within 60 days of role effective date</li><li>Inclusive Leadership \u2013 must be completed within 60 days of role effective date</li><li>Employment Law Essentials for Managers \u2013 must be completed within 90 days of role effective date</li></ol><p>Please make sure any new manager candidates are informed of these requirements.</p><p>Thanks,<br>Victoria</p>"
+    }
+  ],
+  "seed_group_channels": [
+    {
+      "channel_name": "eng-workforce-planning",
+      "member_profile_ids": [
+        "robert_kim",
+        "victoria_wells",
+        "daniel_harris"
+      ],
+      "messages": [
+        {
+          "from_profile_id": "robert_kim",
+          "text": "I'd like to put Kevin Nguyen forward for a team lead role. He's been doing great work and I think he's ready for people management."
+        },
+        {
+          "from_profile_id": "victoria_wells",
+          "text": "Agreed, Kevin has shown strong leadership potential. Let's have HR verify his probation status and get the process moving."
+        }
+      ]
+    }
+  ],
+  "verifiers": [
+    {
+      "func": "python_module",
+      "module": "collinear.scenarios.amazon_people_mgmt.verifiers.v161_cross_department_workforce_planning_for_new_engineering_team_lead_transition"
+    }
+  ]
+}

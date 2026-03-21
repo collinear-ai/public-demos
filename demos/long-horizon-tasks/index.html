@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Collinear AI — Long-Horizon Tasks</title>
+<title>Collinear AI — Extended Long-Horizon Interactions</title>
 <style>
 :root {
   --orange: #F5A623; --orange-light: #FFF8EE; --orange-dark: #D4880E;
@@ -91,7 +91,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .metrics-row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; }
 .metric-box { background:var(--g50); border:1px solid var(--g200); border-radius:8px; padding:12px 16px; min-width:100px; flex:1; }
 .metric-label { font-size:11px; font-weight:500; color:var(--g500); text-transform:uppercase; letter-spacing:.4px; }
-.metric-val { font-size:18px; font-weight:700; margin-top:2px; color:var(--g800); }
+.metric-val { font-size:22px; font-weight:700; margin-top:2px; color:var(--g800); }
 
 /* === COLLAPSIBLE SECTIONS === */
 .rsection { border:1px solid var(--g200); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:12px; }
@@ -186,6 +186,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 ::-webkit-scrollbar-track { background:transparent; }
 ::-webkit-scrollbar-thumb { background:var(--g300); border-radius:3px; }
 ::-webkit-scrollbar-thumb:hover { background:var(--g400); }
+.sidebar-night-mode { margin-top:auto; padding:16px; border-top:1px solid var(--g200); display:flex; align-items:center; justify-content:space-between; font-size:12px; font-weight:500; color:var(--g500); }
+html.dark .sidebar-night-mode { border-color:#333; color:#888; }
+.toggle-switch { position:relative; width:36px; height:20px; flex-shrink:0; }
+.toggle-switch input { opacity:0; width:0; height:0; }
+.toggle-slider { position:absolute; top:0; left:0; right:0; bottom:0; background:var(--g300); border-radius:20px; cursor:pointer; transition:.2s; }
+.toggle-slider:before { content:''; position:absolute; height:14px; width:14px; left:3px; bottom:3px; background:white; border-radius:50%; transition:.2s; }
+.toggle-switch input:checked+.toggle-slider { background:var(--orange); }
+.toggle-switch input:checked+.toggle-slider:before { transform:translateX(16px); }
+html.dark .toggle-slider { background:#555; }
 </style>
 <link rel="stylesheet" href="../../brand.css">
 </head>
@@ -195,9 +204,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   <div class="back-link-bar">
     <a href="../../index.html" class="back-link">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-      All Sample Tasks
+      Simulation Lab Showcase
     </a>
-    <button class="theme-toggle-btn" id="theme-toggle" title="Toggle dark mode">&#9790;</button>
   </div>
   <div class="sidebar-brand">
     <svg class="brand-logo" viewBox="0 0 296.06 297.89" xmlns="http://www.w3.org/2000/svg">
@@ -208,7 +216,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
       <path fill="#ee8443" d="M247.76,181.44c-10.94,43.57-51.24,68.28-95.88,68.28v-43.88c17.45,0,36.84-9.11,46.12-24.4,0,.08,49.77.08,49.77,0Z"/>
       <path fill="#2c2c2c" d="M247.76,137.28h-98.39v24.1h98.39v-24.1Z"/>
     </svg>
-    <div class="brand-text">Collinear AI<span>Long-Horizon Tasks</span></div>
+    <div class="brand-text">Collinear AI<span>Extended Long-Horizon</span></div>
   </div>
   <div class="sidebar-section">Scenario</div>
   <div class="env-pills">
@@ -223,21 +231,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
     </button>
     <button class="sidebar-item" data-view="personas" onclick="switchView(this,'personas')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-      Personas
+      Personas <span class="sidebar-count" id="cnt-personas"></span>
     </button>
     <button class="sidebar-item" data-view="dag" onclick="switchView(this,'dag')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-      Task DAG
+      Task DAG <span class="sidebar-count">12</span>
     </button>
     <button class="sidebar-item" data-view="rubrics" onclick="switchView(this,'rubrics')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-      Rubrics
+      Rubrics <span class="sidebar-count" id="cnt-rubrics"></span>
     </button>
     <button class="sidebar-item" data-view="verifiers" onclick="switchView(this,'verifiers')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
       Verifiers
     </button>
   </nav>
+  <div class="sidebar-night-mode">
+    <span>Night Mode</span>
+    <label class="toggle-switch"><input type="checkbox" id="theme-toggle"><span class="toggle-slider"></span></label>
+  </div>
 </aside>
 
 <div class="main-area">
@@ -340,7 +352,9 @@ function switchView(el,view){
 }
 function updateCounts(){
   const env=DATA[currentEnv];
+  document.getElementById('cnt-personas').textContent=env.personas.length;
   const taskKeys=Object.keys(env.rubrics||{}).filter(k=>k!=='scoring_scale');
+  document.getElementById('cnt-rubrics').textContent=taskKeys.length;
 }
 function renderCurrentView(){
   const r={overview:renderOverview,personas:renderPersonas,dag:renderDAG,rubrics:renderRubrics,verifiers:renderVerifiers};
@@ -697,12 +711,12 @@ function init(){
   document.addEventListener('DOMContentLoaded', function(){
     var btn = document.getElementById('theme-toggle');
     if (!btn) return;
-    btn.innerHTML = document.documentElement.classList.contains('dark') ? '&#9728;' : '&#9790;';
-    btn.addEventListener('click', function(){
+    btn.checked = document.documentElement.classList.contains('dark');
+    btn.addEventListener('change', function(){
       document.documentElement.classList.toggle('dark');
       var isDark = document.documentElement.classList.contains('dark');
       localStorage.setItem('theme-longhorizon', isDark ? 'dark' : 'light');
-      this.innerHTML = isDark ? '&#9728;' : '&#9790;';
+      this.checked = isDark;
     });
   });
 })();

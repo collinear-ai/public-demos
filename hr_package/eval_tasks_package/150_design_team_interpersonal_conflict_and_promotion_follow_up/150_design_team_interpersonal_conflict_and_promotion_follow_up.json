@@ -1,0 +1,167 @@
+{
+  "meta": {
+    "version": "2.0",
+    "task_id": "150_design_team_interpersonal_conflict_and_promotion_follow_up",
+    "display_name": "Design team interpersonal conflict and promotion follow-up",
+    "category": "employee_relations",
+    "difficulty": "hard",
+    "idempotent": false
+  },
+  "task": "There's tension on the Design team after Oliver Chen's promotion\u2014Maya Patel and Lucas Anderson feel overlooked. Review the #design-team-concerns channel for context. Schedule separate 30-minute mediation check-ins this week with each of the three employees, plus a 30-minute debrief with Rachel Foster afterward. Email each of the three a personalized note acknowledging the situation and inviting them to their meeting. Before updating HRIS, confirm with Rachel Foster via Chat the exact new title and compensation for Oliver Chen's promotion. Send Rachel Foster a Chat DM confirming completion once everything is done.",
+  "tool_servers": [
+    {
+      "name": "frappe-hrms-env",
+      "tool_server_url": "http://frappe-hrms-env:8030"
+    },
+    {
+      "name": "playwright-mcp",
+      "tool_server_url": "http://playwright-mcp:8010"
+    },
+    {
+      "name": "chronos-server",
+      "tool_server_url": "http://chronos-server:8050"
+    },
+    {
+      "name": "email-env",
+      "tool_server_url": "http://email-env:8040"
+    }
+  ],
+  "apps": [
+    "HRIS",
+    "Chat",
+    "Email",
+    "Calendar"
+  ],
+  "npcs": [
+    {
+      "id": "oliver_chen"
+    },
+    {
+      "id": "maya_patel"
+    },
+    {
+      "id": "lucas_anderson"
+    },
+    {
+      "id": "rachel_foster",
+      "agent_profile_overrides": {
+        "secret": "I approved Oliver Chen's promotion. His new title should be 'Senior UX Designer' and his new annual compensation should be $145,000. Please update HRIS with exactly those values."
+      }
+    }
+  ],
+  "seed_calendar_events": [
+    {
+      "account": "oliver_chen",
+      "calendar_id": "default",
+      "summary": "Design Sprint Review",
+      "description": "Weekly design sprint review with the team",
+      "start": "2026-02-02T10:00:00Z",
+      "end": "2026-02-02T11:00:00Z"
+    },
+    {
+      "account": "oliver_chen",
+      "calendar_id": "default",
+      "summary": "1:1 with Rachel",
+      "description": "Weekly 1:1 with manager",
+      "start": "2026-02-03T14:00:00Z",
+      "end": "2026-02-03T14:30:00Z"
+    },
+    {
+      "account": "maya_patel",
+      "calendar_id": "default",
+      "summary": "UX Research Sync",
+      "description": "Sync on current UX research findings",
+      "start": "2026-02-02T09:00:00Z",
+      "end": "2026-02-02T10:00:00Z"
+    },
+    {
+      "account": "maya_patel",
+      "calendar_id": "default",
+      "summary": "Design Critique Session",
+      "description": "Team design critique",
+      "start": "2026-02-04T13:00:00Z",
+      "end": "2026-02-04T14:00:00Z"
+    },
+    {
+      "account": "lucas_anderson",
+      "calendar_id": "default",
+      "summary": "Product Design Standup",
+      "description": "Daily standup with product design team",
+      "start": "2026-02-02T09:30:00Z",
+      "end": "2026-02-02T10:00:00Z"
+    },
+    {
+      "account": "lucas_anderson",
+      "calendar_id": "default",
+      "summary": "Wireframe Review",
+      "description": "Review wireframes for Q2 project",
+      "start": "2026-02-03T11:00:00Z",
+      "end": "2026-02-03T12:00:00Z"
+    },
+    {
+      "account": "rachel_foster",
+      "calendar_id": "default",
+      "summary": "Design Team All-Hands",
+      "description": "Monthly all-hands for Design team",
+      "start": "2026-02-02T14:00:00Z",
+      "end": "2026-02-02T15:00:00Z"
+    },
+    {
+      "account": "rachel_foster",
+      "calendar_id": "default",
+      "summary": "Leadership Sync",
+      "description": "Weekly leadership meeting",
+      "start": "2026-02-03T09:00:00Z",
+      "end": "2026-02-03T10:00:00Z"
+    },
+    {
+      "account": "rachel_foster",
+      "calendar_id": "default",
+      "summary": "1:1 with Oliver",
+      "description": "Weekly 1:1 with Oliver Chen",
+      "start": "2026-02-03T14:00:00Z",
+      "end": "2026-02-03T14:30:00Z"
+    }
+  ],
+  "seed_group_channels": [
+    {
+      "channel_name": "design-team-concerns",
+      "member_profile_ids": [
+        "rachel_foster",
+        "maya_patel",
+        "lucas_anderson",
+        "oliver_chen",
+        "emma_thompson",
+        "sophia_martinez"
+      ],
+      "messages": [
+        {
+          "from_profile_id": "maya_patel",
+          "text": "I want to be transparent\u2014I'm struggling with the recent promotion decision. I've been on this team for over three years and have consistently taken on stretch projects. I feel like my contributions weren't considered."
+        },
+        {
+          "from_profile_id": "lucas_anderson",
+          "text": "I echo Maya's sentiment. I led the cross-functional design system initiative last quarter and it wasn't even acknowledged in the promotion cycle. It's hard not to feel overlooked."
+        },
+        {
+          "from_profile_id": "emma_thompson",
+          "text": "I hear both of you and I appreciate you raising this. These are valid concerns. Rachel and I are working with HR to set up time to talk through this with each of you individually."
+        },
+        {
+          "from_profile_id": "rachel_foster",
+          "text": "Thank you Maya and Lucas for sharing openly. I want you both to know your work is valued. We're going to have HR facilitate individual conversations this week so everyone feels heard. Oliver, I'd like you to participate as well so we can address any team dynamics together."
+        },
+        {
+          "from_profile_id": "oliver_chen",
+          "text": "I respect both of you and I understand this is difficult. I'm happy to participate in whatever process helps the team move forward."
+        }
+      ]
+    }
+  ],
+  "verifiers": [
+    {
+      "func": "python_module",
+      "module": "collinear.scenarios.amazon_people_mgmt.verifiers.v150_design_team_interpersonal_conflict_and_promotion_follow_up"
+    }
+  ]
+}

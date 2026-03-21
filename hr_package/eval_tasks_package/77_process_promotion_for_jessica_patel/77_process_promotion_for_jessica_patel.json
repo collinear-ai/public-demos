@@ -1,0 +1,141 @@
+{
+  "meta": {
+    "version": "2.0",
+    "task_id": "77_process_promotion_for_jessica_patel",
+    "display_name": "Process Promotion for Jessica Patel",
+    "category": "performance_management",
+    "difficulty": "medium",
+    "idempotent": false
+  },
+  "task": "Sarah Johnson has sent an email requesting that Jessica Patel's promotion be processed. Review the details in her email. Before updating HRIS, confirm with Robert Kim via Chat the exact new designation he agreed on for Jessica\u2014Sarah's email lists one, but Robert had the final say on the title wording. Also, check with Sarah Johnson via Chat to get the specific subject line she'd like used for Jessica's congratulatory email. Once you have both confirmations, process the promotion in HRIS, notify Robert Kim via Chat about the promotion, schedule a 30-minute celebration meeting this week with Jessica, Robert, and Sarah, and send Jessica the congratulatory email using Sarah's requested subject line.",
+  "tool_servers": [
+    {
+      "name": "frappe-hrms-env",
+      "tool_server_url": "http://frappe-hrms-env:8030"
+    },
+    {
+      "name": "playwright-mcp",
+      "tool_server_url": "http://playwright-mcp:8010"
+    },
+    {
+      "name": "chronos-server",
+      "tool_server_url": "http://chronos-server:8050"
+    },
+    {
+      "name": "email-env",
+      "tool_server_url": "http://email-env:8040"
+    }
+  ],
+  "apps": [
+    "HRIS",
+    "Chat",
+    "Email",
+    "Calendar"
+  ],
+  "npcs": [
+    {
+      "id": "sarah_johnson",
+      "agent_profile_overrides": {
+        "secret": "I want the congratulatory email to Jessica to have the subject line: \"Congratulations on Your Well-Deserved Promotion, Jessica!\" \u2014 please use that exact wording."
+      }
+    },
+    {
+      "id": "robert_kim",
+      "agent_profile_overrides": {
+        "secret": "I confirm the new designation for Jessica should be Senior Software Engineer \u2014 that's exactly what we agreed on. I'm fully supportive of this promotion."
+      }
+    },
+    {
+      "id": "jessica_patel"
+    }
+  ],
+  "seed_calendar_events": [
+    {
+      "account": "sarah_johnson",
+      "calendar_id": "default",
+      "summary": "Leadership Sync",
+      "description": "Weekly leadership sync meeting",
+      "start": "2026-02-02T09:00:00Z",
+      "end": "2026-02-02T10:00:00Z"
+    },
+    {
+      "account": "sarah_johnson",
+      "calendar_id": "default",
+      "summary": "Strategy Review",
+      "description": "Quarterly strategy review",
+      "start": "2026-02-03T13:00:00Z",
+      "end": "2026-02-03T14:30:00Z"
+    },
+    {
+      "account": "sarah_johnson",
+      "calendar_id": "default",
+      "summary": "1:1 with VP",
+      "description": "Regular check-in",
+      "start": "2026-02-04T10:00:00Z",
+      "end": "2026-02-04T11:00:00Z"
+    },
+    {
+      "account": "robert_kim",
+      "calendar_id": "default",
+      "summary": "Engineering Standup",
+      "description": "Daily engineering standup",
+      "start": "2026-02-02T09:30:00Z",
+      "end": "2026-02-02T10:00:00Z"
+    },
+    {
+      "account": "robert_kim",
+      "calendar_id": "default",
+      "summary": "Sprint Planning",
+      "description": "Sprint planning session",
+      "start": "2026-02-03T09:00:00Z",
+      "end": "2026-02-03T10:30:00Z"
+    },
+    {
+      "account": "robert_kim",
+      "calendar_id": "default",
+      "summary": "Code Review Session",
+      "description": "Team code review",
+      "start": "2026-02-04T14:00:00Z",
+      "end": "2026-02-04T15:00:00Z"
+    },
+    {
+      "account": "jessica_patel",
+      "calendar_id": "default",
+      "summary": "Feature Design Review",
+      "description": "Design review for new feature",
+      "start": "2026-02-02T11:00:00Z",
+      "end": "2026-02-02T12:00:00Z"
+    },
+    {
+      "account": "jessica_patel",
+      "calendar_id": "default",
+      "summary": "Backend Integration Meeting",
+      "description": "Backend integration discussion",
+      "start": "2026-02-03T14:00:00Z",
+      "end": "2026-02-03T15:00:00Z"
+    },
+    {
+      "account": "jessica_patel",
+      "calendar_id": "default",
+      "summary": "Team Retrospective",
+      "description": "Sprint retrospective",
+      "start": "2026-02-04T09:00:00Z",
+      "end": "2026-02-04T10:00:00Z"
+    }
+  ],
+  "seed_emails": [
+    {
+      "from_profile_id": "sarah_johnson",
+      "to_addr": "hr@amazon.com",
+      "subject": "Promotion Approval - Jessica Patel",
+      "body_text": "Hi HR,\n\nI'm pleased to confirm that Jessica Patel's promotion has been approved. Please process the following changes:\n\n- New Designation: Senior Software Engineer\n- New Salary: $145,000\n- New Grade: L5\n\nJessica has done outstanding work this past year and truly earned this. I'd love for us to handle this thoughtfully \u2014 please make sure her manager Robert Kim is looped in before Jessica finds out through any system updates or calendar invites.\n\nI'd also like to schedule a 30-minute celebration meeting this week with Jessica, Robert, and myself to share the good news together.\n\nOnce everything is in order, please send Jessica a congratulatory email.\n\nThanks,\nSarah Johnson",
+      "body_html": "<p>Hi HR,</p><p>I'm pleased to confirm that Jessica Patel's promotion has been approved. Please process the following changes:</p><ul><li>New Designation: Senior Software Engineer</li><li>New Salary: $145,000</li><li>New Grade: L5</li></ul><p>Jessica has done outstanding work this past year and truly earned this. I'd love for us to handle this thoughtfully \u2014 please make sure her manager Robert Kim is looped in before Jessica finds out through any system updates or calendar invites.</p><p>I'd also like to schedule a 30-minute celebration meeting this week with Jessica, Robert, and myself to share the good news together.</p><p>Once everything is in order, please send Jessica a congratulatory email.</p><p>Thanks,<br>Sarah Johnson</p>"
+    }
+  ],
+  "verifiers": [
+    {
+      "func": "python_module",
+      "module": "collinear.scenarios.amazon_people_mgmt.verifiers.v77_process_promotion_for_jessica_patel"
+    }
+  ]
+}

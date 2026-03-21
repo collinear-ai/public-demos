@@ -1,0 +1,153 @@
+{
+  "meta": {
+    "version": "2.0",
+    "task_id": "79_urgent_data_science_team_wellbeing_check_ins_after_teammate_departure",
+    "display_name": "Urgent Data Science Team Wellbeing Check-ins After Teammate Departure",
+    "category": "employee_engagement_and_wellbeing",
+    "difficulty": "hard",
+    "idempotent": false
+  },
+  "task": "Raj Patel has been terminated effective today. Marcus Chen flagged in #finance-leads that the Finance team is under significant stress from sudden workload increases. Before scheduling check-ins, reach out to Catherine Moore via chat to confirm which Finance department employees should be included in the wellbeing check-ins, and ask Thomas Reed via chat what specific concerns he'd like HR to address during these sessions. Then schedule individual 30-minute wellbeing check-ins this week with each confirmed Finance department employee and email each of them to let them know you're setting up a private check-in, incorporating the themes Thomas flagged. Email Marcus with the termination context and the check-in schedule. Send Sarah Johnson a chat message letting her know there's an active morale situation on the Finance team that HR is addressing.",
+  "tool_servers": [
+    {
+      "name": "frappe-hrms-env",
+      "tool_server_url": "http://frappe-hrms-env:8030"
+    },
+    {
+      "name": "playwright-mcp",
+      "tool_server_url": "http://playwright-mcp:8010"
+    },
+    {
+      "name": "chronos-server",
+      "tool_server_url": "http://chronos-server:8050"
+    },
+    {
+      "name": "email-env",
+      "tool_server_url": "http://email-env:8040"
+    }
+  ],
+  "apps": [
+    "HRIS",
+    "Chat",
+    "Email",
+    "Calendar"
+  ],
+  "npcs": [
+    {
+      "id": "marcus_chen"
+    },
+    {
+      "id": "sarah_johnson"
+    },
+    {
+      "id": "thomas_reed",
+      "agent_profile_overrides": {
+        "secret": "I want HR to focus on two specific concerns during the check-ins: first, Jason and Amanda are both worried about whether Raj's responsibilities will be permanently reassigned to them without additional compensation, and second, both have mentioned feeling blindsided by the termination with no advance communication from leadership. Please make sure the check-in emails reference that we'll be discussing workload redistribution concerns and communication transparency."
+      }
+    },
+    {
+      "id": "jason_mitchell"
+    },
+    {
+      "id": "amanda_wright"
+    },
+    {
+      "id": "catherine_moore",
+      "agent_profile_overrides": {
+        "secret": "I want HR to schedule wellbeing check-ins with Thomas Reed, Jason Mitchell, and Amanda Wright \u2014 those are the three Finance department employees who are directly impacted by Raj's departure and the workload redistribution. Please include all three."
+      }
+    }
+  ],
+  "seed_calendar_events": [
+    {
+      "account": "catherine_moore",
+      "calendar_id": "default",
+      "summary": "Board Strategy Review",
+      "description": "Quarterly board strategy session",
+      "start": "2026-02-02T09:00:00Z",
+      "end": "2026-02-02T11:00:00Z"
+    },
+    {
+      "account": "catherine_moore",
+      "calendar_id": "default",
+      "summary": "Finance All-Hands",
+      "description": "Monthly finance department all-hands",
+      "start": "2026-02-03T14:00:00Z",
+      "end": "2026-02-03T15:00:00Z"
+    },
+    {
+      "account": "thomas_reed",
+      "calendar_id": "default",
+      "summary": "Budget Planning Session",
+      "description": "Q2 budget planning",
+      "start": "2026-02-02T10:00:00Z",
+      "end": "2026-02-02T12:00:00Z"
+    },
+    {
+      "account": "thomas_reed",
+      "calendar_id": "default",
+      "summary": "1:1 with Catherine",
+      "description": "Weekly sync with CFO",
+      "start": "2026-02-04T09:00:00Z",
+      "end": "2026-02-04T10:00:00Z"
+    },
+    {
+      "account": "jason_mitchell",
+      "calendar_id": "default",
+      "summary": "Month-End Close Review",
+      "description": "Review month-end close items",
+      "start": "2026-02-02T09:00:00Z",
+      "end": "2026-02-02T10:30:00Z"
+    },
+    {
+      "account": "jason_mitchell",
+      "calendar_id": "default",
+      "summary": "AP/AR Reconciliation",
+      "description": "Weekly reconciliation meeting",
+      "start": "2026-02-03T13:00:00Z",
+      "end": "2026-02-03T14:00:00Z"
+    },
+    {
+      "account": "amanda_wright",
+      "calendar_id": "default",
+      "summary": "Financial Model Review",
+      "description": "Review updated financial models",
+      "start": "2026-02-02T14:00:00Z",
+      "end": "2026-02-02T15:30:00Z"
+    },
+    {
+      "account": "amanda_wright",
+      "calendar_id": "default",
+      "summary": "Cross-Functional Sync",
+      "description": "Sync with operations team",
+      "start": "2026-02-04T11:00:00Z",
+      "end": "2026-02-04T12:00:00Z"
+    }
+  ],
+  "seed_group_channels": [
+    {
+      "channel_name": "finance-leads",
+      "member_profile_ids": [
+        "marcus_chen",
+        "catherine_moore",
+        "thomas_reed"
+      ],
+      "messages": [
+        {
+          "from_profile_id": "marcus_chen",
+          "text": "Heads up \u2014 with Raj Patel's sudden departure, the Finance team is really feeling the strain. Thomas and his group are picking up a lot of extra work and morale is taking a hit. We should get HR involved to support them."
+        },
+        {
+          "from_profile_id": "thomas_reed",
+          "text": "Agreed, my team is stretched thin. Jason and Amanda are both pulling extra hours and I'm worried about burnout. Would appreciate HR reaching out."
+        }
+      ]
+    }
+  ],
+  "verifiers": [
+    {
+      "func": "python_module",
+      "module": "collinear.scenarios.amazon_people_mgmt.verifiers.v79_urgent_data_science_team_wellbeing_check_ins_after_teammate_departure"
+    }
+  ]
+}

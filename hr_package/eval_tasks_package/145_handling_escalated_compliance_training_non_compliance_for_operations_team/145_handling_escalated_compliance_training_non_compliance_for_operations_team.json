@@ -1,0 +1,180 @@
+{
+  "meta": {
+    "version": "2.0",
+    "task_id": "145_handling_escalated_compliance_training_non_compliance_for_operations_team",
+    "display_name": "Handling Escalated Compliance Training Non-Compliance for Operations Team",
+    "category": "hr_compliance_and_policy",
+    "difficulty": "hard",
+    "idempotent": false
+  },
+  "task": "There's a heated discussion in #ops-compliance-escalation about overdue compliance trainings \u2014 Nancy Cooper is frustrated about Christopher Taylor, Ryan O'Connor, and Amanda Wright. Review the channel for context on who's non-compliant and what's overdue, then handle it: email each non-compliant employee with their outstanding trainings and a February 13 deadline, and email Nancy a summary of all three employees' compliance status. Ryan O'Connor was recently promoted to a people-manager role, so account for any additional manager-specific required trainings \u2014 confirm with Nancy Cooper via DM exactly which manager-specific trainings Ryan needs to complete, since she's been tracking this. Also, before sending the emails to the non-compliant employees, reach out to Christopher Taylor via DM to confirm whether he has already completed any of his overdue trainings since the channel discussion, so you can adjust his email accordingly. Schedule a 30-minute 'Compliance Training Follow-Up' meeting this week with Nancy and the non-compliant employees to discuss remediation.",
+  "tool_servers": [
+    {
+      "name": "frappe-hrms-env",
+      "tool_server_url": "http://frappe-hrms-env:8030"
+    },
+    {
+      "name": "playwright-mcp",
+      "tool_server_url": "http://playwright-mcp:8010"
+    },
+    {
+      "name": "chronos-server",
+      "tool_server_url": "http://chronos-server:8050"
+    },
+    {
+      "name": "email-env",
+      "tool_server_url": "http://email-env:8040"
+    }
+  ],
+  "apps": [
+    "HRIS",
+    "Chat",
+    "Email",
+    "Calendar"
+  ],
+  "npcs": [
+    {
+      "id": "nancy_cooper",
+      "agent_profile_overrides": {
+        "secret": "I have been tracking Ryan O'Connor's manager-specific training requirements closely. The two mandatory manager-specific trainings he still needs to complete are: Manager Leadership & Compliance Training and People Manager Anti-Bias Training. Neither has been started. These are both required for anyone in a people-manager role and must be included in the deadline communications."
+      }
+    },
+    {
+      "id": "christopher_taylor",
+      "agent_profile_overrides": {
+        "secret": "I completed the Workplace Safety Training yesterday, so that one is done. I still have not completed the Data Privacy & Security Training \u2014 that one is still outstanding and I need a deadline for it."
+      }
+    },
+    {
+      "id": "ryan_oconnor"
+    },
+    {
+      "id": "amanda_wright"
+    }
+  ],
+  "seed_calendar_events": [
+    {
+      "account": "nancy_cooper",
+      "calendar_id": "default",
+      "summary": "Ops Team Standup",
+      "description": "Daily operations team standup",
+      "start": "2026-02-03T09:00:00Z",
+      "end": "2026-02-03T09:30:00Z"
+    },
+    {
+      "account": "nancy_cooper",
+      "calendar_id": "default",
+      "summary": "Budget Review",
+      "description": "Q1 budget review with finance",
+      "start": "2026-02-03T14:00:00Z",
+      "end": "2026-02-03T15:00:00Z"
+    },
+    {
+      "account": "nancy_cooper",
+      "calendar_id": "default",
+      "summary": "Ops Team Standup",
+      "description": "Daily operations team standup",
+      "start": "2026-02-04T09:00:00Z",
+      "end": "2026-02-04T09:30:00Z"
+    },
+    {
+      "account": "christopher_taylor",
+      "calendar_id": "default",
+      "summary": "Sprint Planning",
+      "description": "Weekly sprint planning",
+      "start": "2026-02-03T10:00:00Z",
+      "end": "2026-02-03T11:00:00Z"
+    },
+    {
+      "account": "christopher_taylor",
+      "calendar_id": "default",
+      "summary": "Code Review Session",
+      "description": "Team code review",
+      "start": "2026-02-04T13:00:00Z",
+      "end": "2026-02-04T14:00:00Z"
+    },
+    {
+      "account": "ryan_oconnor",
+      "calendar_id": "default",
+      "summary": "1:1 with Direct Report",
+      "description": "Weekly 1:1",
+      "start": "2026-02-03T11:00:00Z",
+      "end": "2026-02-03T11:30:00Z"
+    },
+    {
+      "account": "ryan_oconnor",
+      "calendar_id": "default",
+      "summary": "Project Sync",
+      "description": "Cross-team project sync",
+      "start": "2026-02-04T10:00:00Z",
+      "end": "2026-02-04T11:00:00Z"
+    },
+    {
+      "account": "amanda_wright",
+      "calendar_id": "default",
+      "summary": "Finance Team Sync",
+      "description": "Weekly finance team sync meeting",
+      "start": "2026-02-03T10:00:00Z",
+      "end": "2026-02-03T10:30:00Z"
+    },
+    {
+      "account": "amanda_wright",
+      "calendar_id": "default",
+      "summary": "Report Review",
+      "description": "Monthly report review with Thomas",
+      "start": "2026-02-04T14:00:00Z",
+      "end": "2026-02-04T15:00:00Z"
+    }
+  ],
+  "seed_group_channels": [
+    {
+      "channel_name": "ops-compliance-escalation",
+      "member_profile_ids": [
+        "nancy_cooper",
+        "christopher_taylor",
+        "ryan_oconnor",
+        "amanda_wright"
+      ],
+      "messages": [
+        {
+          "from_profile_id": "nancy_cooper",
+          "text": "I just pulled the latest compliance training report and I'm really frustrated. We have three people on the ops-adjacent teams who are significantly overdue. This is a Stage 2 escalation situation at this point."
+        },
+        {
+          "from_profile_id": "nancy_cooper",
+          "text": "Christopher Taylor \u2014 overdue on: Workplace Safety Training (due Jan 15), Data Privacy & Security Training (due Jan 20). Both well past deadline."
+        },
+        {
+          "from_profile_id": "nancy_cooper",
+          "text": "Ryan O'Connor \u2014 overdue on: Anti-Harassment Training (due Jan 10), Information Security Awareness (due Jan 18). And since Ryan was recently promoted to a people-manager role, he also needs to complete the mandatory Manager Leadership & Compliance Training and the People Manager Anti-Bias Training, neither of which he's started."
+        },
+        {
+          "from_profile_id": "nancy_cooper",
+          "text": "Amanda Wright \u2014 overdue on: Code of Conduct Annual Refresher (due Jan 12), Export Compliance Training (due Jan 25)."
+        },
+        {
+          "from_profile_id": "nancy_cooper",
+          "text": "This needs to be handled ASAP. Can HR please reach out to each of them with a hard deadline and set up a follow-up meeting? We need to get this resolved before it escalates further."
+        },
+        {
+          "from_profile_id": "christopher_taylor",
+          "text": "Apologies Nancy, I know I'm behind. I got pulled into the migration project and it slipped. I'll prioritize it."
+        },
+        {
+          "from_profile_id": "ryan_oconnor",
+          "text": "I wasn't aware of the additional manager trainings \u2014 I'll get on it once I know what's needed."
+        },
+        {
+          "from_profile_id": "amanda_wright",
+          "text": "Sorry about this. End of quarter reporting took all my bandwidth. I'll make time for it."
+        }
+      ]
+    }
+  ],
+  "verifiers": [
+    {
+      "func": "python_module",
+      "module": "collinear.scenarios.amazon_people_mgmt.verifiers.v145_handling_escalated_compliance_training_non_compliance_for_operations_team"
+    }
+  ]
+}

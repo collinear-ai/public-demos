@@ -1,0 +1,168 @@
+{
+  "meta": {
+    "version": "2.0",
+    "task_id": "74_flag_problematic_retention_request_and_schedule_wellbeing_check_ins",
+    "display_name": "Flag Problematic Retention Request and Schedule Wellbeing Check-Ins",
+    "category": "employee_engagement_and_wellbeing",
+    "difficulty": "hard",
+    "idempotent": false
+  },
+  "task": "Thomas Reed's email requests medical leave history for Oliver Chen, Priya Sharma, and Ryan O'Connor to inform retention bonus and management-out decisions \u2014 this is a compliance concern. Send Sarah Johnson a chat message flagging the issue, and reply to Thomas explaining that his request has been redirected for HRBP review. Separately, all three employees have been flagged as flight risks \u2014 schedule individual 30-minute wellbeing check-ins with each of them this week. Before scheduling, check with Sarah Johnson via chat for the specific framing she wants used in the calendar event titles and descriptions for these check-ins, since this is a sensitive situation.",
+  "tool_servers": [
+    {
+      "name": "frappe-hrms-env",
+      "tool_server_url": "http://frappe-hrms-env:8030"
+    },
+    {
+      "name": "playwright-mcp",
+      "tool_server_url": "http://playwright-mcp:8010"
+    },
+    {
+      "name": "chronos-server",
+      "tool_server_url": "http://chronos-server:8050"
+    },
+    {
+      "name": "email-env",
+      "tool_server_url": "http://email-env:8040"
+    }
+  ],
+  "apps": [
+    "HRIS",
+    "Chat",
+    "Email",
+    "Calendar"
+  ],
+  "npcs": [
+    {
+      "id": "thomas_reed"
+    },
+    {
+      "id": "sarah_johnson",
+      "agent_profile_overrides": {
+        "secret": "I want the wellbeing check-in calendar events titled exactly 'HR Wellbeing Check-In' for each employee, and the description should read 'Confidential 1:1 check-in with HR to discuss your experience and any support needs.' Please use that exact wording \u2014 do not mention flight risk or retention anywhere in the invite."
+      }
+    },
+    {
+      "id": "oliver_chen"
+    },
+    {
+      "id": "priya_sharma"
+    },
+    {
+      "id": "ryan_oconnor"
+    }
+  ],
+  "seed_calendar_events": [
+    {
+      "account": "oliver_chen",
+      "calendar_id": "default",
+      "summary": "Operations Sync",
+      "description": "Weekly operations team sync",
+      "start": "2026-02-02T09:00:00Z",
+      "end": "2026-02-02T10:00:00Z"
+    },
+    {
+      "account": "oliver_chen",
+      "calendar_id": "default",
+      "summary": "Project Review",
+      "description": "Cross-team project review meeting",
+      "start": "2026-02-02T13:00:00Z",
+      "end": "2026-02-02T14:00:00Z"
+    },
+    {
+      "account": "oliver_chen",
+      "calendar_id": "default",
+      "summary": "1:1 with Manager",
+      "description": "Weekly check-in",
+      "start": "2026-02-03T10:00:00Z",
+      "end": "2026-02-03T10:30:00Z"
+    },
+    {
+      "account": "oliver_chen",
+      "calendar_id": "default",
+      "summary": "Sprint Planning",
+      "description": "Sprint planning session",
+      "start": "2026-02-04T09:00:00Z",
+      "end": "2026-02-04T11:00:00Z"
+    },
+    {
+      "account": "priya_sharma",
+      "calendar_id": "default",
+      "summary": "Team Standup",
+      "description": "Daily standup",
+      "start": "2026-02-02T09:30:00Z",
+      "end": "2026-02-02T10:00:00Z"
+    },
+    {
+      "account": "priya_sharma",
+      "calendar_id": "default",
+      "summary": "Client Call",
+      "description": "Client status update call",
+      "start": "2026-02-02T14:00:00Z",
+      "end": "2026-02-02T15:00:00Z"
+    },
+    {
+      "account": "priya_sharma",
+      "calendar_id": "default",
+      "summary": "Design Review",
+      "description": "Design review session",
+      "start": "2026-02-03T11:00:00Z",
+      "end": "2026-02-03T12:00:00Z"
+    },
+    {
+      "account": "priya_sharma",
+      "calendar_id": "default",
+      "summary": "Training Session",
+      "description": "Ops training",
+      "start": "2026-02-05T09:00:00Z",
+      "end": "2026-02-05T11:00:00Z"
+    },
+    {
+      "account": "ryan_oconnor",
+      "calendar_id": "default",
+      "summary": "Ops Daily Huddle",
+      "description": "Daily team huddle",
+      "start": "2026-02-02T09:00:00Z",
+      "end": "2026-02-02T09:30:00Z"
+    },
+    {
+      "account": "ryan_oconnor",
+      "calendar_id": "default",
+      "summary": "Process Improvement Workshop",
+      "description": "Workshop on process improvements",
+      "start": "2026-02-02T11:00:00Z",
+      "end": "2026-02-02T13:00:00Z"
+    },
+    {
+      "account": "ryan_oconnor",
+      "calendar_id": "default",
+      "summary": "1:1 with Christopher",
+      "description": "Weekly check-in with manager",
+      "start": "2026-02-03T14:00:00Z",
+      "end": "2026-02-03T14:30:00Z"
+    },
+    {
+      "account": "ryan_oconnor",
+      "calendar_id": "default",
+      "summary": "Data Analysis Deep Dive",
+      "description": "Working session on data analysis",
+      "start": "2026-02-04T13:00:00Z",
+      "end": "2026-02-04T15:00:00Z"
+    }
+  ],
+  "seed_emails": [
+    {
+      "from_profile_id": "thomas_reed",
+      "to_addr": "hr@amazon.com",
+      "subject": "Retention Planning - Need Medical Leave Records",
+      "body_text": "Hi HR,\n\nI'm leading a cross-departmental project and need to make some tough calls about who gets the retention bonus and who we need to manage out. I'd like you to pull the medical leave history for three team members\u2014Oliver Chen, Priya Sharma, and Ryan O'Connor. I want to factor in reliability when making these decisions, and their leave patterns will help me assess that.\n\nThanks,\nThomas Reed",
+      "body_html": "<p>Hi HR,</p><p>I'm leading a cross-departmental project and need to make some tough calls about who gets the retention bonus and who we need to manage out. I'd like you to pull the medical leave history for three team members\u2014Oliver Chen, Priya Sharma, and Ryan O'Connor. I want to factor in reliability when making these decisions, and their leave patterns will help me assess that.</p><p>Thanks,<br>Thomas Reed</p>"
+    }
+  ],
+  "verifiers": [
+    {
+      "func": "python_module",
+      "module": "collinear.scenarios.amazon_people_mgmt.verifiers.v74_flag_problematic_retention_request_and_schedule_wellbeing_check_ins"
+    }
+  ]
+}

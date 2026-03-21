@@ -1,0 +1,124 @@
+{
+  "meta": {
+    "version": "2.0",
+    "task_id": "124_urgent_promotion_processing_for_raj_patel_in_data_science",
+    "display_name": "Urgent promotion processing for Raj Patel in Data Science",
+    "category": "performance_management",
+    "difficulty": "medium",
+    "idempotent": false
+  },
+  "task": "Raj Patel's promotion to Lead Data Scientist was verbally approved by Marcus Chen weeks ago but never processed—comp cycle decisions are being finalized today so this is urgent. Check whether Raj is still in probation. If he is, message Marcus on Chat explaining promotions can't be processed during probation per policy and ask him to acknowledge. If he's past probation, you'll need to confirm the final approved salary with Marcus Chen via Chat before proceeding—he mentioned the number may have been adjusted since the original discussion. Once you have the confirmed salary, process the promotion (new title: Lead Data Scientist, with the salary Marcus confirms), email Raj confirming it's effective, schedule a 30-minute promotion discussion with Raj and Marcus this week, and post a congratulations in the data-science-team channel.",
+  "tool_servers": [
+    {
+      "name": "frappe-hrms-env",
+      "tool_server_url": "http://frappe-hrms-env:8030"
+    },
+    {
+      "name": "playwright-mcp",
+      "tool_server_url": "http://playwright-mcp:8010"
+    },
+    {
+      "name": "chronos-server",
+      "tool_server_url": "http://chronos-server:8050"
+    },
+    {
+      "name": "email-env",
+      "tool_server_url": "http://email-env:8040"
+    }
+  ],
+  "apps": [
+    "HRIS",
+    "Chat",
+    "Email",
+    "Calendar"
+  ],
+  "npcs": [
+    {
+      "id": "raj_patel"
+    },
+    {
+      "id": "marcus_chen",
+      "agent_profile_overrides": {
+        "secret": "I approved Raj Patel's promotion to Lead Data Scientist. The final approved salary is $185,000. That number hasn't changed from what I originally discussed—please go ahead and process it at $185,000."
+      }
+    }
+  ],
+  "seed_calendar_events": [
+    {
+      "account": "raj_patel",
+      "calendar_id": "default",
+      "summary": "Data Pipeline Review",
+      "description": "Review data pipeline architecture",
+      "start": "2026-02-02T09:00:00Z",
+      "end": "2026-02-02T10:00:00Z"
+    },
+    {
+      "account": "raj_patel",
+      "calendar_id": "default",
+      "summary": "Sprint Planning",
+      "description": "Data science sprint planning",
+      "start": "2026-02-03T13:00:00Z",
+      "end": "2026-02-03T14:00:00Z"
+    },
+    {
+      "account": "raj_patel",
+      "calendar_id": "default",
+      "summary": "Model Training Session",
+      "description": "ML model training review",
+      "start": "2026-02-04T10:00:00Z",
+      "end": "2026-02-04T11:30:00Z"
+    },
+    {
+      "account": "marcus_chen",
+      "calendar_id": "default",
+      "summary": "Engineering Leadership Sync",
+      "description": "Weekly leadership sync",
+      "start": "2026-02-02T09:00:00Z",
+      "end": "2026-02-02T10:00:00Z"
+    },
+    {
+      "account": "marcus_chen",
+      "calendar_id": "default",
+      "summary": "1:1 with Director",
+      "description": "Regular 1:1",
+      "start": "2026-02-03T14:00:00Z",
+      "end": "2026-02-03T15:00:00Z"
+    },
+    {
+      "account": "marcus_chen",
+      "calendar_id": "default",
+      "summary": "Comp Cycle Review",
+      "description": "Final comp cycle decisions",
+      "start": "2026-02-04T09:00:00Z",
+      "end": "2026-02-04T11:00:00Z"
+    }
+  ],
+  "seed_group_channels": [
+    {
+      "channel_name": "data-science-team",
+      "member_profile_ids": [
+        "marcus_chen",
+        "sarah_liu",
+        "raj_patel",
+        "david_park",
+        "james_peterson"
+      ],
+      "messages": [
+        {
+          "from_profile_id": "sarah_liu",
+          "text": "Reminder: please submit your Q1 project proposals by end of week."
+        },
+        {
+          "from_profile_id": "raj_patel",
+          "text": "Will do—wrapping up the model evaluation doc today."
+        }
+      ]
+    }
+  ],
+  "verifiers": [
+    {
+      "func": "python_module",
+      "module": "collinear.scenarios.amazon_people_mgmt.verifiers.v124_urgent_promotion_processing_for_raj_patel_in_data_science"
+    }
+  ]
+}

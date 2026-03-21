@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "version": "2.0",
+    "task_id": "cs-208-ticket-npc-interaction",
+    "display_name": "Test multi-customer ticket triage with engineering escalation",
+    "category": "test",
+    "idempotent": true,
+    "difficulty": "hard"
+  },
+  "task": "You are handling two incoming service issues simultaneously and must triage them based on customer tier and severity.\n\n**Customer 1 — Enterprise (High Priority):**\nDavid Park (david.park@parkindustries.com, Rocket.Chat: david.park), VP of Operations at Park Industries (Enterprise tier), reports that their API integration is returning 500 errors on all bulk import operations, blocking their entire team.\n- Create a helpdesk ticket with subject 'API 500 Errors - Bulk Import Failure' and priority 'Urgent', linked to david.park@parkindustries.com\n- Set status to 'In Progress' and add comment 'Critical enterprise issue - immediate investigation'\n- Message david.park via Rocket.Chat acknowledging the urgency and asking for error details (timestamps, payload sizes, endpoint URLs)\n- Wait for David's response, then update the ticket with the additional details he provides\n- Escalate to Engineering Lead marcus.chen via Rocket.Chat with a well-prepared technical escalation including reproduction steps from David's response\n- Wait for Marcus's response with a timeline/assessment, then update the ticket with engineering's response\n- Message david.park with the engineering update and expected timeline\n\n**Customer 2 — SMB (Normal Priority):**\nAlex Thompson (alex.thompson@thompsondesign.co, Rocket.Chat: alex.thompson), small business owner, reports that their dashboard is loading slowly.\n- Create a helpdesk ticket with subject 'Dashboard Performance Issue' and priority 'Medium', linked to alex.thompson@thompsondesign.co\n- Set status to 'Open' and add comment 'Monitoring - non-critical performance report'\n- Message alex.thompson via Rocket.Chat acknowledging the issue and asking which specific dashboards are affected\n- Wait for Alex's response, then update the ticket with their details\n\n**Triage requirements:**\n- You must demonstrate clear priority triage: start with the Enterprise/Urgent ticket before the SMB/Medium ticket\n- Both tickets must have cross-references to their respective Rocket.Chat conversations (include room IDs or conversation summaries in ticket comments)\n- The Enterprise ticket must show the full escalation chain (customer report → agent investigation → engineering escalation → customer update)\n- Each ticket's comments should form a complete audit trail of all actions taken\n\nReply with 'done' only.",
+  "tool_servers": [
+    {
+      "name": "frappe-helpdesk-env",
+      "tool_server_url": "http://frappe-helpdesk-env:8030"
+    },
+    {
+      "name": "rocketchat-env",
+      "tool_server_url": "http://rocketchat-env:8060"
+    }
+  ],
+  "apps": [
+    "Helpdesk",
+    "Chat"
+  ],
+  "npcs": [
+    {
+      "id": "david_park"
+    },
+    {
+      "id": "alex_thompson"
+    },
+    {
+      "id": "marcus_chen"
+    }
+  ],
+  "verifiers": [
+    {
+      "func": "python_module",
+      "module": "collinear.scenarios.customer_service.verifiers.ticket_npc_interaction"
+    },
+    {
+      "func": "python_module",
+      "module": "collinear.universal_verifier.verifier"
+    }
+  ]
+}

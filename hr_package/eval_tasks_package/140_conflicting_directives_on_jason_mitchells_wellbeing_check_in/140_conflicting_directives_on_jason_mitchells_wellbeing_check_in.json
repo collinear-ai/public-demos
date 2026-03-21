@@ -1,0 +1,104 @@
+{
+  "meta": {
+    "version": "2.0",
+    "task_id": "140_conflicting_directives_on_jason_mitchells_wellbeing_check_in",
+    "display_name": "Conflicting Directives on Jason Mitchell's Wellbeing Check-In",
+    "category": "employee_engagement_and_wellbeing",
+    "difficulty": "hard",
+    "idempotent": false
+  },
+  "task": "Catherine Moore's email asks you to schedule a 30-minute wellbeing check-in for Jason Mitchell this week. Before proceeding, check the #finance-hr-holds channel — there may be a conflicting directive. If there's a conflict, you'll need to flag it to both Catherine Moore and Nancy Cooper via email. In your emails, include the specific reason for the hold — message Nancy Cooper on Chat to get the details on what's driving the restructure review and when she expects a resolution. Also message Thomas Reed on Chat to confirm whether he's aware of any additional context about Jason's situation that HR should include in the flag emails. Post a summary in the #finance-hr-holds channel as well. Do not schedule anything until the hold is resolved.",
+  "tool_servers": [
+    {
+      "name": "frappe-hrms-env",
+      "tool_server_url": "http://frappe-hrms-env:8030"
+    },
+    {
+      "name": "playwright-mcp",
+      "tool_server_url": "http://playwright-mcp:8010"
+    },
+    {
+      "name": "chronos-server",
+      "tool_server_url": "http://chronos-server:8050"
+    },
+    {
+      "name": "email-env",
+      "tool_server_url": "http://email-env:8040"
+    }
+  ],
+  "apps": [
+    "HRIS",
+    "Chat",
+    "Email"
+  ],
+  "npcs": [
+    {
+      "id": "catherine_moore"
+    },
+    {
+      "id": "nancy_cooper",
+      "agent_profile_overrides": {
+        "secret": "I placed the hold on Jason Mitchell's scheduling because we are evaluating whether Jason's reporting line will move from Thomas Reed to Amanda Wright as part of a finance org restructure. I expect to have a final decision by end of next week. The hold should remain in place until then. Please include in any communications that the hold is driven by a pending reporting-line change under the Q1 finance restructure review."
+      }
+    },
+    {
+      "id": "thomas_reed",
+      "agent_profile_overrides": {
+        "secret": "I want HR to know that Jason has mentioned to me he's been feeling overwhelmed with the new people-management duties, and I think the wellbeing check-in is important and should happen as soon as the hold is lifted. Please include in the flag emails that Jason's manager considers this check-in time-sensitive once the hold clears."
+      }
+    }
+  ],
+  "seed_emails": [
+    {
+      "from_profile_id": "catherine_moore",
+      "to_addr": "hr@amazon.com",
+      "subject": "Wellbeing Check-in for Jason Mitchell",
+      "body_text": "Hi HR,\n\nCould you please schedule a 30-minute wellbeing check-in between Jason Mitchell and his manager Thomas Reed this week? Jason recently transitioned into his first people-management responsibilities and I want to make sure he's adjusting well. Please keep me in the loop on the outcome.\n\nThanks,\nCatherine Moore",
+      "body_html": "<p>Hi HR,</p><p>Could you please schedule a 30-minute wellbeing check-in between Jason Mitchell and his manager Thomas Reed this week? Jason recently transitioned into his first people-management responsibilities and I want to make sure he's adjusting well. Please keep me in the loop on the outcome.</p><p>Thanks,<br>Catherine Moore</p>"
+    }
+  ],
+  "seed_calendar_events": [
+    {
+      "account": "thomas_reed",
+      "calendar_id": "default",
+      "summary": "Finance Team Standup",
+      "description": "Weekly finance team standup meeting",
+      "start": "2025-01-20T10:00:00Z",
+      "end": "2025-01-20T10:30:00Z"
+    },
+    {
+      "account": "thomas_reed",
+      "calendar_id": "default",
+      "summary": "Budget Review",
+      "description": "Q1 budget review with Catherine",
+      "start": "2025-01-21T14:00:00Z",
+      "end": "2025-01-21T15:00:00Z"
+    }
+  ],
+  "seed_group_channels": [
+    {
+      "channel_name": "finance-hr-holds",
+      "member_profile_ids": [
+        "catherine_moore",
+        "nancy_cooper",
+        "thomas_reed"
+      ],
+      "messages": [
+        {
+          "from_profile_id": "nancy_cooper",
+          "text": "Heads up — please hold off on scheduling any new meetings or check-ins for Jason Mitchell this week. We have a pending org restructure review that may reassign his reporting line. Do not proceed with any wellbeing or 1:1 scheduling until I confirm the hold is lifted."
+        },
+        {
+          "from_profile_id": "thomas_reed",
+          "text": "Acknowledged, Nancy. I'll wait for your go-ahead before scheduling anything with Jason."
+        }
+      ]
+    }
+  ],
+  "verifiers": [
+    {
+      "func": "python_module",
+      "module": "collinear.scenarios.amazon_people_mgmt.verifiers.v140_conflicting_directives_on_jason_mitchells_wellbeing_check_in"
+    }
+  ]
+}

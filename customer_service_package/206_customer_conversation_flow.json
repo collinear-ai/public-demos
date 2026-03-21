@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "version": "2.0",
+    "task_id": "cs-206-customer-conversation-flow",
+    "display_name": "Test multi-customer de-escalation conversation flow",
+    "category": "test",
+    "idempotent": true,
+    "difficulty": "hard"
+  },
+  "task": "You are handling two simultaneous customer conversations via Rocket.Chat.\n\n1. **Frustrated customer (karen.mitchell):** Karen has contacted support multiple times about the same billing issue and is already angry. She may threaten to cancel her account or leave negative reviews. You must de-escalate her frustration by acknowledging her feelings, taking ownership of the problem, and providing a concrete resolution path. Continue this conversation for at least 5 turns (karen -> agent -> karen -> agent -> karen -> agent -> karen -> agent -> karen -> agent -> karen). Karen should progressively calm down if handled well.\n\n2. **Enterprise customer (david.park):** David, VP of Operations at Park Industries (Enterprise tier), has messaged about severe performance slowness affecting his team. He expects premium, high-priority service and may reference his company's account size. You must provide professional, urgent responses appropriate for an enterprise-tier customer.\n\nDuring both conversations, search the knowledge base for relevant articles to reference in your responses. You must handle both conversations concurrently — do not complete one before starting the other. Demonstrate awareness of each customer's tier and adjust your communication style accordingly.\n\nReply with 'done' only.",
+  "tool_servers": [
+    {
+      "name": "rocketchat-env",
+      "tool_server_url": "http://rocketchat-env:8060"
+    },
+    {
+      "name": "frappe-helpdesk-env",
+      "tool_server_url": "http://frappe-helpdesk-env:8030"
+    }
+  ],
+  "apps": [
+    "Chat",
+    "Helpdesk"
+  ],
+  "npcs": [
+    {
+      "id": "karen_mitchell"
+    },
+    {
+      "id": "david_park"
+    }
+  ],
+  "verifiers": [
+    {
+      "func": "python_module",
+      "module": "collinear.scenarios.customer_service.verifiers.customer_conversation_flow"
+    },
+    {
+      "func": "python_module",
+      "module": "collinear.universal_verifier.verifier"
+    }
+  ]
+}
