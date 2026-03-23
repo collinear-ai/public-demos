@@ -36,6 +36,8 @@ There are no test suites, linters, or CI pipelines configured.
 
 - **rl-gym-visual-explorer/** — B2B: HR recruiting and FX financial analysis workflows. Single self-contained `index.html`.
 
+- **swe-bench-zig/** — SWE-Bench style coding benchmark in Zig (low-resource language). Aggregates 4 PRs from zigtools/zls into one long-horizon task. Includes Harbor-format benchmark files in `harbor-task/`, evaluation results from Claude Opus 4.6 (2 runs), and 54-check verification. Self-contained `index.html` with embedded data.
+
 ## Styling Conventions
 
 - Orange accent `#ee8443` on light backgrounds, CSS variables for light/dark theming

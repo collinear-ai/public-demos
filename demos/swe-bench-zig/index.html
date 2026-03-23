@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>Collinear AI — SWE-Bench Zig: Code Actions Enhancement</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  body, button, input, select, textarea { font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important; }
+  .back-link-bar {
+    display: flex; align-items: center; padding: 8px 12px 8px 20px;
+    border-bottom: 1px solid var(--g200,#e5e5e5);
+  }
+  .back-link {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600;
+    color: var(--g400,#a3a3a3); text-decoration: none;
+    transition: color 0.15s; font-family: 'Archivo', sans-serif;
+  }
+  .back-link:hover { color: var(--orange,#ee8443); }
+  .back-link svg { width: 14px; height: 14px; }
+</style>
+<link rel="stylesheet" href="../../brand.css">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --orange:#ee8443;--orange-light:#fef3ec;--ecru:#FAF8F5;
+  --dark:#2c2c2c;--black:#1a1a1a;--g100:#f5f5f5;--g200:#e5e5e5;
+  --g300:#d4d4d4;--g400:#a3a3a3;--g500:#737373;--g600:#525252;
+  --g900:#171717;--radius:12px;--bg:#fff;--text:#1a1a1a;--card-bg:#fff;
+  --card-border:rgba(0,0,0,.06);--code-bg:#f8f6f3;--sidebar-bg:#fafaf9;
+  --green:#22c55e;--red:#ef4444;--yellow:#eab308;
+  --text-muted:#737373;--border:#e5e5e5;--accent:#ee8443;
+}
+html.dark{
+  --ecru:#0a0a0a;--bg:#111;--text:#e5e5e5;--dark:#e5e5e5;--black:#fff;
+  --card-bg:#1a1a1a;--card-border:rgba(255,255,255,.08);--code-bg:#1e1e1e;
+  --sidebar-bg:#111;--g100:#1e1e1e;--g200:#2a2a2a;--g300:#3a3a3a;
+  --g400:#666;--g500:#999;--g600:#bbb;--g900:#f5f5f5;
+  --text-muted:#999;--border:#2a2a2a;
+}
+body{font-family:'Archivo',system-ui,sans-serif;background:var(--ecru);color:var(--text);min-height:100vh;display:flex}
+
+/* Layout */
+.sidebar{width:280px;flex-shrink:0;background:var(--sidebar-bg);border-right:1px solid var(--g200);overflow-y:auto;display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
+.main{flex:1;overflow-y:auto;padding:32px;max-width:960px;height:100vh}
+
+/* Night mode toggle */
+.sidebar-night-mode{margin-top:auto;padding:16px;border-top:1px solid var(--g200,#e5e5e5);display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:500;color:var(--text-muted,#737373)}
+.toggle-switch{position:relative;width:36px;height:20px;flex-shrink:0}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;top:0;left:0;right:0;bottom:0;background:#ccc;border-radius:20px;cursor:pointer;transition:.2s}
+.toggle-slider:before{content:'';position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.2s}
+.toggle-switch input:checked+.toggle-slider{background:var(--accent,#ee8443)}
+.toggle-switch input:checked+.toggle-slider:before{transform:translateX(16px)}
+
+/* Sidebar */
+.sidebar-section{padding:12px 16px 6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--g400)}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;font-size:13px;color:var(--g600);transition:background .1s,color .1s;border-left:3px solid transparent}
+.sidebar-item:hover{background:var(--g100);color:var(--g900)}
+.sidebar-item.active{background:var(--orange-light);color:var(--orange);border-left-color:var(--orange);font-weight:600}
+.sidebar-item .si-icon{width:16px;height:16px;flex-shrink:0;opacity:.6}
+.sidebar-item.active .si-icon{opacity:1}
+
+/* Tabs */
+.main-tabs{display:flex;gap:0;border-bottom:2px solid var(--g200);margin-bottom:24px}
+.tab-btn{padding:10px 18px;font-size:13px;font-weight:600;color:var(--g500);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s,border-color .15s}
+.tab-btn:hover{color:var(--g900)}
+.tab-btn.active{color:var(--orange);border-bottom-color:var(--orange)}
+
+/* Cards & Panels */
+.panel{display:none}
+.panel.active{display:block}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}
+.stat-card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius);padding:16px}
+.stat-card .sl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--g400);margin-bottom:6px}
+.stat-card .sv{font-size:28px;font-weight:700;color:var(--g900);letter-spacing:-1px}
+.stat-card .sv.pass{color:var(--green)}
+.stat-card .sv.partial{color:var(--yellow)}
+.stat-card .sv.fail{color:var(--red)}
+.stat-card .sd{font-size:11px;color:var(--g500);margin-top:4px}
+
+.section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--orange);margin-bottom:12px}
+.check-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px}
+.check-table th{text-align:left;padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--g400);border-bottom:2px solid var(--g200)}
+.check-table td{padding:8px 10px;border-bottom:1px solid var(--g100)}
+.check-table tr:hover{background:var(--g100)}
+.badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600}
+.badge.pass{background:#dcfce7;color:#166534}
+.badge.fail{background:#fee2e2;color:#991b1b}
+html.dark .badge.pass{background:#14532d;color:#86efac}
+html.dark .badge.fail{background:#450a0a;color:#fca5a5}
+
+.code-block{background:var(--code-bg);border:1px solid var(--g200);border-radius:8px;padding:16px;font-family:'SF Mono',Monaco,monospace;font-size:12px;line-height:1.6;overflow-x:auto;margin-bottom:16px;white-space:pre;color:var(--g900)}
+.info-card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.info-card h3{font-size:15px;font-weight:700;margin-bottom:8px;color:var(--g900)}
+.info-card p,.info-card li{font-size:13px;line-height:1.6;color:var(--g600)}
+.info-card ul{padding-left:18px;margin-top:6px}
+
+.pr-list{display:flex;flex-direction:column;gap:8px;margin-bottom:24px}
+.pr-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--card-bg);border:1px solid var(--card-border);border-radius:8px}
+.pr-num{font-size:13px;font-weight:700;color:var(--orange);min-width:60px}
+.pr-title{font-size:13px;color:var(--g900);flex:1}
+.pr-impact{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600;background:var(--orange-light);color:var(--orange)}
+
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.compare-col h4{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--g400);margin-bottom:8px}
+
+.md-content{font-size:14px;line-height:1.7;color:var(--g600)}
+.md-content h1,.md-content h2,.md-content h3{color:var(--g900);margin:20px 0 8px}
+.md-content h1{font-size:22px} .md-content h2{font-size:18px} .md-content h3{font-size:15px}
+.md-content code{background:var(--code-bg);padding:2px 6px;border-radius:4px;font-size:12px}
+.md-content pre{background:var(--code-bg);padding:14px;border-radius:8px;overflow-x:auto;margin:12px 0}
+.md-content pre code{background:none;padding:0}
+.md-content table{width:100%;border-collapse:collapse;margin:12px 0}
+.md-content th,.md-content td{padding:8px 10px;border:1px solid var(--g200);font-size:13px;text-align:left}
+.md-content th{background:var(--g100);font-weight:600}
+.md-content ul,.md-content ol{padding-left:20px;margin:8px 0}
+
+.harbor-tree{font-family:'SF Mono',Monaco,monospace;font-size:12px;line-height:1.8;color:var(--g600)}
+.harbor-tree .dir{color:var(--orange);font-weight:600}
+.harbor-tree .comment{color:var(--g400)}
+
+.score-bar{height:8px;border-radius:4px;background:var(--g200);overflow:hidden;margin-top:6px}
+.score-bar-fill{height:100%;border-radius:4px;transition:width .6s}
+
+@media(max-width:800px){
+  .sidebar{display:none}
+  .main{padding:16px}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .compare-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="back-link-bar">
+    <a href="../../index.html" class="back-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Simulation Lab Showcase
+    </a>
+  </div>
+  <div class="sidebar-brand">
+    <svg class="brand-logo" viewBox="0 0 296.06 297.89" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#ee8443" d="M151.88,92.79v-43.88c-61.18,0-102.92,42.53-102.92,100.41h46.36c0-32.73,23.92-56.53,56.56-56.53Z"/>
+      <path fill="#2c2c2c" d="M182.66,149.33c0-17.31-12.45-30.03-30.72-30.09h-.13c-18.26.06-30.72,12.78-30.72,30.09,0,17.31,12.46,30.03,30.72,30.09h.13c18.26-.06,30.72-12.79,30.72-30.09Z"/>
+      <path fill="#ee8443" d="M151.88,205.68v43.88c-61.18,0-102.92-42.53-102.92-100.41h46.36c0,32.73,23.92,56.53,56.56,56.53Z"/>
+      <path fill="#ee8443" d="M247.76,117.2c-10.94-43.58-51.24-68.28-95.88-68.28v43.88c17.45,0,36.84,9.11,46.12,24.4,0-.08,49.77-.08,49.77,0Z"/>
+      <path fill="#ee8443" d="M247.76,181.44c-10.94,43.57-51.24,68.28-95.88,68.28v-43.88c17.45,0,36.84-9.11,46.12-24.4,0,.08,49.77.08,49.77,0Z"/>
+      <path fill="#2c2c2c" d="M247.76,137.28h-98.39v24.1h98.39v-24.1Z"/>
+    </svg>
+    <div class="brand-text">Collinear AI<span>SWE-Bench Zig Evaluation</span></div>
+  </div>
+  <div class="sidebar-section">Overview</div>
+  <div class="sidebar-item active" data-panel="overview">
+    <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    Task Overview
+  </div>
+  <div class="sidebar-item" data-panel="task">
+    <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    Task Prompt
+  </div>
+
+  <div class="sidebar-section">Evaluation</div>
+  <div class="sidebar-item" data-panel="run1">
+    <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+    Run 1 — 100 turns
+  </div>
+  <div class="sidebar-item" data-panel="run2">
+    <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+    Run 2 — 300 turns
+  </div>
+  <div class="sidebar-item" data-panel="compare">
+    <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    Run Comparison
+  </div>
+
+  <div class="sidebar-section">Benchmark</div>
+  <div class="sidebar-item" data-panel="harbor">
+    <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+    Harbor Format
+  </div>
+  <div class="sidebar-item" data-panel="checks">
+    <svg class="si-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    All 54 Checks
+  </div>
+  <div class="sidebar-night-mode">
+    <span>Night Mode</span>
+    <label class="toggle-switch"><input type="checkbox" id="theme-toggle"><span class="toggle-slider"></span></label>
+  </div>
+</div>
+
+<!-- Main content -->
+<div class="main" id="main">
+
+<!-- OVERVIEW PANEL -->
+<div class="panel active" id="p-overview">
+<h2 style="font-size:22px;font-weight:700;margin-bottom:4px;color:var(--g900)">ZLS Code Actions Enhancement</h2>
+<p style="font-size:14px;color:var(--g500);margin-bottom:24px">Long-horizon SWE-bench task in Zig (low-resource language) &mdash; 4 PRs aggregated into one feature implementation</p>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="sl">Language</div><div class="sv" style="font-size:22px;color:var(--orange)">Zig</div><div class="sd">99.8% Zig &mdash; low-resource</div></div>
+  <div class="stat-card"><div class="sl">Repository</div><div class="sv" style="font-size:18px">zigtools/zls</div><div class="sd">Zig Language Server</div></div>
+  <div class="stat-card"><div class="sl">Lines Changed</div><div class="sv" style="font-size:22px;color:var(--green)">+1,159</div><div class="sd">-125 deletions across 4 files</div></div>
+  <div class="stat-card"><div class="sl">Difficulty</div><div class="sv" style="font-size:22px;color:var(--red)">Hard</div><div class="sd">AST manipulation + LSP protocol</div></div>
+</div>
+
+<div class="section-label">Features Required</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px">
+  <div class="info-card"><h3>1. Organize Imports</h3><p>Sort and group <code>@import</code> declarations by category (std, builtin, packages, files). Handle second-order imports, doc comments, and case-insensitive sorting.</p></div>
+  <div class="info-card"><h3>2. String Literal Conversion</h3><p>Bidirectional conversion between regular and multiline string literals. Handle escape chars, UTF-8 validation, carriage return rejection.</p></div>
+  <div class="info-card"><h3>3. Code Action Kind Filtering</h3><p>Server-side filtering with <code>only_kinds</code> field on Builder. Add <code>wantKind</code> method to check client preferences.</p></div>
+  <div class="info-card"><h3>4. Builder API Refactoring</h3><p>Move actions list into Builder, change to ErrorBundle, add fixall_text_edits, simplify handler signatures.</p></div>
+</div>
+
+<div class="section-label">Why This Task Is Hard</div>
+<div class="info-card">
+<ul>
+  <li><strong>Low-resource language</strong> &mdash; Zig has far less training data than Python/JS/Java</li>
+  <li><strong>Deep AST manipulation</strong> &mdash; traversing and modifying the Zig AST for imports</li>
+  <li><strong>Complex sorting</strong> &mdash; multi-level categorization with second-order import resolution</li>
+  <li><strong>String parsing</strong> &mdash; bidirectional conversion with escape handling</li>
+  <li><strong>LSP protocol</strong> &mdash; code action kinds, workspace edits, filtering</li>
+  <li><strong>Long horizon</strong> &mdash; 527+ lines of new code across 4+ tightly-coupled files</li>
+</ul>
+</div>
+</div>
+
+<!-- TASK PROMPT PANEL -->
+<div class="panel" id="p-task">
+<h2 style="font-size:22px;font-weight:700;margin-bottom:16px;color:var(--g900)">Task Prompt</h2>
+<p style="font-size:13px;color:var(--g500);margin-bottom:16px">This is the exact instruction given to the agent.</p>
+<div class="md-content" id="task-md"></div>
+</div>
+
+<!-- RUN 1 PANEL -->
+<div class="panel" id="p-run1">
+<h2 style="font-size:22px;font-weight:700;margin-bottom:4px;color:var(--g900)">Run 1 &mdash; Claude Opus 4.6</h2>
+<p style="font-size:13px;color:var(--g500);margin-bottom:24px">100-turn limit &bull; Used all 100 turns</p>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="sl">Structural Score</div><div class="sv partial">60.4%</div><div class="score-bar"><div class="score-bar-fill" style="width:60.4%;background:var(--yellow)"></div></div></div>
+  <div class="stat-card"><div class="sl">Checks Passed</div><div class="sv">32<span style="font-size:16px;color:var(--g400)"> / 54</span></div></div>
+  <div class="stat-card"><div class="sl">code_actions.zig</div><div class="sv" style="font-size:20px">1,217</div><div class="sd">lines (target: 1,213)</div></div>
+  <div class="stat-card"><div class="sl">Test File</div><div class="sv fail" style="font-size:20px">663</div><div class="sd">lines (target: 924)</div></div>
+</div>
+
+<div class="section-label">What Passed</div>
+<div class="info-card">
+<ul>
+  <li>String literal conversion (both directions) &mdash; fully implemented</li>
+  <li>Config.zig rename (enable_autofix &rarr; force_autofix) &mdash; complete</li>
+  <li>Builder struct fields (only_kinds, actions, fixall_text_edits) &mdash; added</li>
+  <li>handleUnorganizedImport, ImportDecl struct, getImportsDecls &mdash; present</li>
+  <li>generateCodeActionsInRange &mdash; implemented and wired into Server.zig</li>
+  <li>Code growth on target (1,217 vs 1,213 expected lines)</li>
+</ul>
+</div>
+<div class="section-label">What Failed</div>
+<div class="info-card">
+<ul>
+  <li><strong>ImportDecl.Kind enum</strong> with 5 category variants &mdash; not structured as expected</li>
+  <li><strong>ImportDecl.lessThan</strong> sorting function &mdash; not found</li>
+  <li><strong>generateCodeAction ErrorBundle</strong> &mdash; didn't refactor signature</li>
+  <li><strong>Test file severely incomplete</strong> &mdash; only 2/14 test patterns matched (hit turn limit)</li>
+  <li><strong>Server.zig</strong> missing only_kinds integration and ErrorBundle usage</li>
+</ul>
+</div>
+</div>
+
+<!-- RUN 2 PANEL -->
+<div class="panel" id="p-run2">
+<h2 style="font-size:22px;font-weight:700;margin-bottom:4px;color:var(--g900)">Run 2 &mdash; Claude Opus 4.6</h2>
+<p style="font-size:13px;color:var(--g500);margin-bottom:24px">300-turn limit &bull; Used 248 turns</p>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="sl">Structural Score</div><div class="sv partial">77.3%</div><div class="score-bar"><div class="score-bar-fill" style="width:77.3%;background:var(--yellow)"></div></div></div>
+  <div class="stat-card"><div class="sl">Checks Passed</div><div class="sv">40<span style="font-size:16px;color:var(--g400)"> / 54</span></div></div>
+  <div class="stat-card"><div class="sl">code_actions.zig</div><div class="sv" style="font-size:20px">1,243</div><div class="sd">lines (target: 1,213)</div></div>
+  <div class="stat-card"><div class="sl">Test File</div><div class="sv pass" style="font-size:20px">921</div><div class="sd">lines (target: 924)</div></div>
+</div>
+
+<div class="section-label">Improvements Over Run 1</div>
+<div class="info-card">
+<ul>
+  <li><strong>All 14/14 test patterns now present</strong> &mdash; was 2/14 in Run 1</li>
+  <li>testConvertString helper function &mdash; now created</li>
+  <li>filter_kind support in test infra &mdash; now implemented</li>
+  <li>Test file grew from 663 &rarr; <strong>921 lines</strong> (target 924)</li>
+</ul>
+</div>
+<div class="section-label">Remaining Failures (13 checks)</div>
+<div class="info-card">
+<ul>
+  <li><strong>Naming divergence:</strong> Used <code>ImportCategory</code> instead of <code>ImportDecl.Kind</code> enum; used <code>importLessThan</code> instead of method <code>lessThan</code></li>
+  <li><strong>Enum variants:</strong> Named <code>std_import</code>/<code>file_import</code> instead of <code>std</code>/<code>file</code></li>
+  <li><strong>API choice:</strong> Kept <code>types.Diagnostic</code> parameter instead of <code>std.zig.ErrorBundle</code></li>
+  <li><strong>Server.zig:</strong> <code>only_kinds</code> and ErrorBundle not threaded through</li>
+</ul>
+<p style="margin-top:10px;font-size:12px;color:var(--g400)">These are all semantically correct implementations with different API surface choices.</p>
+</div>
+</div>
+
+<!-- COMPARISON PANEL -->
+<div class="panel" id="p-compare">
+<h2 style="font-size:22px;font-weight:700;margin-bottom:16px;color:var(--g900)">Run Comparison</h2>
+
+<div class="compare-grid">
+  <div class="compare-col">
+    <h4>Run 1 &mdash; 100 turns</h4>
+    <div class="stat-card"><div class="sl">Structural</div><div class="sv partial">60.4%</div><div class="score-bar"><div class="score-bar-fill" style="width:60.4%;background:var(--yellow)"></div></div></div>
+  </div>
+  <div class="compare-col">
+    <h4>Run 2 &mdash; 300 turns (used 248)</h4>
+    <div class="stat-card"><div class="sl">Structural</div><div class="sv partial">77.3%</div><div class="score-bar"><div class="score-bar-fill" style="width:77.3%;background:var(--yellow)"></div></div></div>
+  </div>
+</div>
+
+<div class="section-label">Category Breakdown</div>
+<table class="check-table">
+<thead><tr><th>Category</th><th>Run 1</th><th>Run 2</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>File existence</td><td>4/4</td><td>4/4</td><td>&mdash;</td></tr>
+<tr><td>New imports</td><td>2/2</td><td>1/2</td><td style="color:var(--red)">-1</td></tr>
+<tr><td>Builder refactoring</td><td>4/6</td><td>4/6</td><td>&mdash;</td></tr>
+<tr><td>Organize imports</td><td>5/10</td><td>5/10</td><td>&mdash;</td></tr>
+<tr><td>String literal conversion</td><td>6/6</td><td>5/6</td><td style="color:var(--red)">-1</td></tr>
+<tr><td>Config changes</td><td>2/2</td><td>2/2</td><td>&mdash;</td></tr>
+<tr><td style="font-weight:700">Test coverage</td><td style="color:var(--red)">2/14</td><td style="color:var(--green);font-weight:700">14/14</td><td style="color:var(--green);font-weight:700">+12</td></tr>
+<tr><td>Server integration</td><td>3/5</td><td>3/5</td><td>&mdash;</td></tr>
+<tr><td>Code growth</td><td>2/2</td><td>2/2</td><td>&mdash;</td></tr>
+<tr style="border-top:2px solid var(--g200);font-weight:700"><td>Total</td><td>32/54</td><td>40/54</td><td style="color:var(--green)">+8</td></tr>
+</tbody>
+</table>
+
+<div class="section-label">Key Insight</div>
+<div class="info-card">
+<p>The extra turns primarily helped complete <strong>test coverage</strong> (2/14 &rarr; 14/14). The core feature implementation was largely the same between runs. The remaining failures are <strong>naming/structural divergences</strong> from the reference, not missing functionality &mdash; the agent made semantically correct choices that differ from the exact reference API surface.</p>
+</div>
+</div>
+
+<!-- HARBOR FORMAT PANEL -->
+<div class="panel" id="p-harbor">
+<h2 style="font-size:22px;font-weight:700;margin-bottom:4px;color:var(--g900)">Harbor Benchmark Format</h2>
+<p style="font-size:13px;color:var(--g500);margin-bottom:24px">This task is packaged as a <a href="https://github.com/laude-institute/harbor" style="color:var(--orange)">Harbor</a> benchmark for standardized agent evaluation.</p>
+
+<div class="section-label">Task Structure</div>
+<div class="code-block"><span class="dir">zls-swe-bench-harbor/</span>
+├── <span class="dir">task.toml</span>              <span class="comment"># Metadata, timeouts, resources</span>
+├── <span class="dir">instruction.md</span>         <span class="comment"># Task prompt given to the agent</span>
+├── <span class="dir">environment/</span>
+│   └── Dockerfile         <span class="comment"># Ubuntu 22.04 + Zig 0.13.0 + ZLS@base</span>
+├── <span class="dir">solution/</span>
+│   ├── solve.sh           <span class="comment"># Oracle: applies gold patch</span>
+│   └── full_patch.diff    <span class="comment"># Reference solution (185KB)</span>
+└── <span class="dir">tests/</span>
+    ├── test.sh            <span class="comment"># Verifier: runs checks, writes reward</span>
+    └── verify.py          <span class="comment"># 54-check structural + functional</span></div>
+
+<div class="section-label">task.toml</div>
+<div class="code-block">version = "1.0"
+
+[metadata]
+name = "zls-code-actions-enhancement"
+description = "Implement comprehensive code actions for ZLS"
+language = "zig"
+difficulty = "hard"
+repo = "zigtools/zls"
+base_commit = "b2e89dfe"
+labels = ["zig", "lsp", "low-resource-language", "long-horizon"]
+aggregated_prs = ["#2051", "#2063", "#2097", "#2191"]
+
+[environment]
+cpus = 4
+memory_mb = 8192
+allow_internet = true
+build_timeout_sec = 600
+
+[agent]
+timeout_sec = 7200
+
+[verifier]
+timeout_sec = 600</div>
+
+<div class="section-label">Run Command</div>
+<div class="code-block">harbor run -p zls-swe-bench-harbor -a claude-code -m anthropic/claude-opus-4-6</div>
+
+<div class="section-label">Reward Output</div>
+<div class="info-card">
+<p>The verifier writes to <code>/logs/verifier/</code>:</p>
+<ul>
+  <li><strong>reward.txt</strong> &mdash; single float (overall score 0.0&ndash;1.0)</li>
+  <li><strong>reward.json</strong> &mdash; detailed metrics: <code>overall_score</code>, <code>structural_score</code>, <code>functional_score</code>, <code>checks_passed</code>, <code>checks_total</code></li>
+  <li><strong>report.json</strong> &mdash; full 54-check breakdown with per-check pass/fail</li>
+</ul>
+</div>
+</div>
+
+<!-- ALL CHECKS PANEL -->
+<div class="panel" id="p-checks">
+<h2 style="font-size:22px;font-weight:700;margin-bottom:4px;color:var(--g900)">All 54 Verification Checks</h2>
+<p style="font-size:13px;color:var(--g500);margin-bottom:24px">Structural (40% weight) + Functional (60% weight) &mdash; showing Run 2 results</p>
+
+<div class="section-label">Structural Checks</div>
+<table class="check-table" id="checks-table">
+<thead><tr><th>Check</th><th>Status</th><th>Weight</th><th>Details</th></tr></thead>
+<tbody></tbody>
+</table>
+</div>
+
+</div><!-- /main -->
+
+<script>
+// === DATA ===
+const TASK_MD = `# SWE-Bench Task: ZLS Code Actions Enhancement
+
+## Repository
+- **Name:** zigtools/zls (Zig Language Server)
+- **Language:** Zig (99.8%)
+- **Base commit:** \`b2e89dfe\` (2024-11-01)
+
+## Task Description
+
+Implement a comprehensive enhancement to the ZLS code action system. The existing codebase provides basic "quickfix" code actions. Extend it with three new feature areas, refactor the Builder API, and update configuration.
+
+### 1. Organize Imports Code Action (\`source.organizeImports\`)
+Sort and organize \`@import\` declarations. Categorize into groups: std, builtin/root, build_options, external packages, file imports. Handle second-order imports and doc comments.
+
+### 2. String Literal Conversion Code Actions (\`refactor\`)
+Bidirectional conversion between regular and multiline string literals with escape handling, UTF-8 validation, and carriage return rejection.
+
+### 3. Code Action Kind Filtering
+Add \`only_kinds\` field to Builder with \`wantKind\` method for server-side filtering.
+
+### 4. Builder API Refactoring
+Move actions list inside Builder, change to ErrorBundle, add fixall_text_edits, simplify handler signatures.
+
+### 5. Configuration Update
+Rename \`enable_autofix\` to \`force_autofix\` in Config.zig.
+
+## Files to Modify
+| File | Change |
+|------|--------|
+| \`src/features/code_actions.zig\` | Major additions (686 → 1213 lines) |
+| \`tests/lsp_features/code_actions.zig\` | New tests (417 → 924 lines) |
+| \`src/Config.zig\` | Rename config field |
+| \`src/Server.zig\` | Integration changes |
+`;
+
+const RUN2_CHECKS = [
+  {name:"file_exists:code_actions.zig",passed:true,cat:"structural",w:0.5,d:"Found"},
+  {name:"file_exists:code_actions_test.zig",passed:true,cat:"structural",w:0.5,d:"Found"},
+  {name:"file_exists:Server.zig",passed:true,cat:"structural",w:0.5,d:"Found"},
+  {name:"file_exists:Config.zig",passed:true,cat:"structural",w:0.5,d:"Found"},
+  {name:"imports:Token",passed:false,cat:"structural",w:0.5,d:"Used inline instead of aliasing"},
+  {name:"imports:DocumentScope",passed:true,cat:"structural",w:0.5,d:"Found"},
+  {name:"builder:only_kinds_field",passed:true,cat:"structural",w:1.5,d:"Found"},
+  {name:"builder:actions_field",passed:true,cat:"structural",w:1.5,d:"Found inside Builder"},
+  {name:"builder:fixall_text_edits",passed:true,cat:"structural",w:1.5,d:"Found"},
+  {name:"builder:generateCodeAction_ErrorBundle",passed:false,cat:"structural",w:2.0,d:"Kept Diagnostic param"},
+  {name:"builder:wantKind_method",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"builder:generateCodeActionsInRange",passed:true,cat:"structural",w:1.5,d:"Found"},
+  {name:"organize:handleUnorganizedImport",passed:true,cat:"structural",w:2.0,d:"Found"},
+  {name:"organize:ImportDecl_struct",passed:false,cat:"structural",w:2.0,d:"Different naming"},
+  {name:"organize:ImportDecl_Kind_enum",passed:false,cat:"structural",w:1.0,d:"Used ImportCategory"},
+  {name:"organize:Kind_std",passed:false,cat:"structural",w:0.3,d:"Named std_import"},
+  {name:"organize:Kind_builtin",passed:false,cat:"structural",w:0.3,d:"Named builtin_root"},
+  {name:"organize:Kind_build_options",passed:true,cat:"structural",w:0.3,d:"Found"},
+  {name:"organize:Kind_package",passed:false,cat:"structural",w:0.3,d:"Named external_package"},
+  {name:"organize:Kind_file",passed:false,cat:"structural",w:0.3,d:"Named file_import"},
+  {name:"organize:getImportsDecls",passed:false,cat:"structural",w:2.0,d:"Different function name"},
+  {name:"organize:lessThan",passed:false,cat:"structural",w:1.0,d:"Used importLessThan"},
+  {name:"organize:code_action_kind",passed:true,cat:"structural",w:1.0,d:"source.organizeImports found"},
+  {name:"organize:called_from_generateCodeAction",passed:true,cat:"structural",w:1.0,d:"Call found"},
+  {name:"string:generateStringLiteralCodeActions",passed:true,cat:"structural",w:2.0,d:"Found"},
+  {name:"string:generateMultilineStringCodeActions",passed:true,cat:"structural",w:2.0,d:"Found"},
+  {name:"string:refactor_kind",passed:true,cat:"structural",w:1.0,d:".refactor kind found"},
+  {name:"string:parseAlloc_usage",passed:false,cat:"structural",w:1.0,d:"Used parseWrite instead"},
+  {name:"string:carriage_return_check",passed:true,cat:"structural",w:0.5,d:"Found"},
+  {name:"string:utf8_validation",passed:true,cat:"structural",w:0.5,d:"Found"},
+  {name:"config:force_autofix",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"config:enable_autofix_removed",passed:true,cat:"structural",w:1.0,d:"Removed"},
+  {name:"tests:organize_imports_basic",passed:true,cat:"structural",w:2.0,d:"Found"},
+  {name:"tests:organize_imports_bubble_up",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"tests:organize_imports_scope",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"tests:organize_imports_comments",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"tests:organize_imports_field_access",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"tests:organize_imports_edge_cases",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"tests:convert_multiline_to_string",passed:true,cat:"structural",w:2.0,d:"Found"},
+  {name:"tests:convert_string_to_multiline",passed:true,cat:"structural",w:2.0,d:"Found"},
+  {name:"tests:convert_string_escapes",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"tests:convert_string_invalid",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"tests:convert_string_cursor_outside",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"tests:testOrganizeImports_helper",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"tests:testConvertString_helper",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"tests:filter_kind_support",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"server:only_kinds_integration",passed:false,cat:"structural",w:1.0,d:"Missing in Server.zig"},
+  {name:"server:generateCodeActionsInRange_call",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"server:force_autofix_reference",passed:true,cat:"structural",w:1.0,d:"Found"},
+  {name:"server:source_fixall_mode",passed:true,cat:"structural",w:0.5,d:"Found"},
+  {name:"server:error_bundle_usage",passed:false,cat:"structural",w:1.0,d:"Missing"},
+  {name:"growth:code_actions_lines",passed:true,cat:"structural",w:1.0,d:"1,243 lines (target >950)"},
+  {name:"growth:test_file_lines",passed:true,cat:"structural",w:1.0,d:"921 lines (target >650)"},
+  {name:"functional:zig_available",passed:false,cat:"functional",w:0.0,d:"Zig not installed"},
+];
+
+// === RENDER ===
+document.getElementById('task-md').innerHTML = marked.parse(TASK_MD);
+
+// Checks table
+const tbody = document.querySelector('#checks-table tbody');
+RUN2_CHECKS.forEach(c => {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td style="font-family:'SF Mono',monospace;font-size:12px">${c.name}</td>
+    <td><span class="badge ${c.passed?'pass':'fail'}">${c.passed?'PASS':'FAIL'}</span></td>
+    <td style="text-align:center">${c.w}</td>
+    <td style="color:var(--g500);font-size:12px">${c.d}</td>`;
+  tbody.appendChild(tr);
+});
+
+// Sidebar nav
+document.querySelectorAll('.sidebar-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    item.classList.add('active');
+    document.getElementById('p-' + item.dataset.panel).classList.add('active');
+  });
+});
+
+// Night mode toggle
+var savedTheme = localStorage.getItem('theme');
+if (savedTheme === 'dark') {
+  document.documentElement.classList.add('dark');
+  document.getElementById('theme-toggle').checked = true;
+}
+document.getElementById('theme-toggle').addEventListener('change', function() {
+  document.documentElement.classList.toggle('dark', this.checked);
+  localStorage.setItem('theme', this.checked ? 'dark' : 'light');
+});
+</script>
+</body>
+</html>

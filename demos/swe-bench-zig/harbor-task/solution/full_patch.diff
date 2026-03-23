@@ -1,0 +1,4310 @@
+diff --git a/src/Config.zig b/src/Config.zig
+index 5919b500..7268a5a8 100644
+--- a/src/Config.zig
++++ b/src/Config.zig
+@@ -10,7 +10,12 @@ enable_snippets: bool = true,
+ /// Whether to enable function argument placeholder completions
+ enable_argument_placeholders: bool = true,
+ 
++/// Whether to show the function signature in completion results. May improve readability in some editors when disabled
++completion_label_details: bool = true,
++
+ /// Whether to enable build-on-save diagnostics. Will be automatically enabled if the `build.zig` has declared a 'check' step.
++///
++/// For more infromation, checkout the [Build-On-Save](https://zigtools.org/zls/guides/build-on-save/) Guide.
+ enable_build_on_save: ?bool = null,
+ 
+ /// Specify which arguments should be passed to Zig when running build-on-save.
+@@ -18,9 +23,6 @@ enable_build_on_save: ?bool = null,
+ /// If the `build.zig` has declared a 'check' step, it will be preferred over the default 'install' step.
+ build_on_save_args: []const []const u8 = &.{},
+ 
+-/// Whether to automatically fix errors on save. Currently supports adding and removing discards.
+-enable_autofix: bool = false,
+-
+ /// Set level of semantic tokens. `partial` only includes information that requires semantic analysis.
+ semantic_tokens: enum {
+     none,
+@@ -43,40 +45,40 @@ inlay_hints_show_builtin: bool = true,
+ /// Don't show inlay hints for single argument calls
+ inlay_hints_exclude_single_argument: bool = true,
+ 
+-/// Hides inlay hints when parameter name matches the identifier (e.g. foo: foo)
++/// Hides inlay hints when parameter name matches the identifier (e.g. `foo: foo`)
+ inlay_hints_hide_redundant_param_names: bool = false,
+ 
+-/// Hides inlay hints when parameter name matches the last token of a parameter node (e.g. foo: bar.foo, foo: &foo)
++/// Hides inlay hints when parameter name matches the last token of a parameter node (e.g. `foo: bar.foo`, `foo: &foo`)
+ inlay_hints_hide_redundant_param_names_last_token: bool = false,
+ 
++/// Work around editors that do not support 'source.fixall' code actions on save. This option may delivered a substandard user experience. Please refer to the installation guide to see which editors natively support code actions on save.
++force_autofix: bool = false,
++
+ /// Enables warnings for style guideline mismatches
+ warn_style: bool = false,
+ 
+ /// Whether to highlight global var declarations
+ highlight_global_var_declarations: bool = false,
+ 
+-/// When true, skips searching for references in std. Improves lookup speed for functions in user's code. Renaming and go-to-definition will continue to work as is
++/// When true, skips searching for references in the standard library. Improves lookup speed for functions in user's code. Renaming and go-to-definition will continue to work as is
+ skip_std_references: bool = false,
+ 
+-/// Favor using `zig ast-check` instead of ZLS's fork
++/// Favor using `zig ast-check` instead of the builtin one
+ prefer_ast_check_as_child_process: bool = true,
+ 
+-/// Path to 'builtin;' useful for debugging, automatically set if let null
++/// Override the path to 'builtin' module. Automatically resolved if unset.
+ builtin_path: ?[]const u8 = null,
+ 
+-/// Zig library path, e.g. `/path/to/zig/lib/zig`, used to analyze std library imports
++/// Override the Zig library path. Will be automatically resolved using the 'zig_exe_path'.
+ zig_lib_path: ?[]const u8 = null,
+ 
+-/// Zig executable path, e.g. `/path/to/zig/zig`, used to run the custom build runner. If `null`, zig is looked up in `PATH`. Will be used to infer the zig standard library path if none is provided
++/// Specify the path to the Zig executable (not the directory). If unset, zig is looked up in `PATH`. e.g. `/path/to/zig-templeos-armless-1.0.0/zig`.
+ zig_exe_path: ?[]const u8 = null,
+ 
+-/// Path to the `build_runner.zig` file provided by ZLS. null is equivalent to `${executable_directory}/build_runner.zig`
++/// Specify a custom build runner to resolve build system information.
+ build_runner_path: ?[]const u8 = null,
+ 
+-/// Path to a directory that will be used as zig's cache. null is equivalent to `${KnownFolders.Cache}/zls`
++/// Path to a directory that will be used as zig's cache. Will default to `${KnownFolders.Cache}/zls`.
+ global_cache_path: ?[]const u8 = null,
+ 
+-/// When false, the function signature of completion results is hidden. Improves readability in some editors
+-completion_label_details: bool = true,
+-
+ // DO NOT EDIT
+diff --git a/src/Server.zig b/src/Server.zig
+index 46f09896..d115f67a 100644
+--- a/src/Server.zig
++++ b/src/Server.zig
+@@ -18,7 +18,9 @@ const offsets = @import("offsets.zig");
+ const tracy = @import("tracy");
+ const diff = @import("diff.zig");
+ const InternPool = @import("analyser/analyser.zig").InternPool;
++const DiagnosticsCollection = @import("DiagnosticsCollection.zig");
+ const known_folders = @import("known-folders");
++const build_runner_shared = @import("build_runner/shared.zig");
+ const BuildRunnerVersion = @import("build_runner/BuildRunnerVersion.zig").BuildRunnerVersion;
+ 
+ const signature_help = @import("features/signature_help.zig");
+@@ -34,8 +36,10 @@ const hover_handler = @import("features/hover.zig");
+ const selection_range = @import("features/selection_range.zig");
+ const diagnostics_gen = @import("features/diagnostics.zig");
+ 
+-const log = std.log.scoped(.zls_server);
+-const message_logger = std.log.scoped(.message);
++const BuildOnSave = diagnostics_gen.BuildOnSave;
++const BuildOnSaveSupport = build_runner_shared.BuildOnSaveSupport;
++
++const log = std.log.scoped(.server);
+ 
+ // public fields
+ allocator: std.mem.Allocator,
+@@ -44,8 +48,8 @@ config: Config = .{},
+ /// will default to lookup in the system and user configuration folder provided by known-folders.
+ config_path: ?[]const u8 = null,
+ document_store: DocumentStore,
++/// Use `setTransport` to set the Transport.
+ transport: ?lsp.AnyTransport = null,
+-message_tracing: bool = false,
+ offset_encoding: offsets.Encoding = .@"utf-16",
+ status: Status = .uninitialized,
+ 
+@@ -54,24 +58,25 @@ thread_pool: if (zig_builtin.single_threaded) void else std.Thread.Pool,
+ wait_group: if (zig_builtin.single_threaded) void else std.Thread.WaitGroup,
+ job_queue: std.fifo.LinearFifo(Job, .Dynamic),
+ job_queue_lock: std.Thread.Mutex = .{},
+-ip: InternPool = .{},
+-// ensure that build on save is only executed once at a time
+-running_build_on_save_processes: std.atomic.Value(usize) = std.atomic.Value(usize).init(0),
++ip: InternPool = undefined,
+ /// avoid Zig deadlocking when spawning multiple `zig ast-check` processes at the same time.
+ /// See https://github.com/ziglang/zig/issues/16369
+ zig_ast_check_lock: std.Thread.Mutex = .{},
++/// The underlying memory has been allocated with `config_arena`.
++runtime_zig_version: ?std.SemanticVersion = null,
+ /// Every changed configuration will increase the amount of memory allocated by the arena,
+ /// This is unlikely to cause any big issues since the user is probably not going set settings
+ /// often in one session,
+ config_arena: std.heap.ArenaAllocator.State = .{},
+ client_capabilities: ClientCapabilities = .{},
++diagnostics_collection: DiagnosticsCollection,
++workspaces: std.ArrayListUnmanaged(Workspace) = .empty,
+ 
+ // Code was based off of https://github.com/andersfr/zig-lsp/blob/master/server.zig
+ 
+ const ClientCapabilities = struct {
+     supports_snippets: bool = false,
+     supports_apply_edits: bool = false,
+-    supports_will_save: bool = false,
+     supports_will_save_wait_until: bool = false,
+     supports_publish_diagnostics: bool = false,
+     supports_code_action_fixall: bool = false,
+@@ -91,12 +96,9 @@ const ClientCapabilities = struct {
+     /// bricking the preview window in Sublime Text.
+     /// https://github.com/zigtools/zls/pull/261
+     max_detail_length: u32 = 1024 * 1024,
+-    workspace_folders: []types.URI = &.{},
+     client_name: ?[]const u8 = null,
+ 
+     fn deinit(self: *ClientCapabilities, allocator: std.mem.Allocator) void {
+-        for (self.workspace_folders) |uri| allocator.free(uri);
+-        allocator.free(self.workspace_folders);
+         if (self.client_name) |name| allocator.free(name);
+         self.* = undefined;
+     }
+@@ -157,13 +159,11 @@ pub const Status = enum {
+ const Job = union(enum) {
+     incoming_message: std.json.Parsed(Message),
+     generate_diagnostics: DocumentStore.Uri,
+-    run_build_on_save,
+ 
+     fn deinit(self: Job, allocator: std.mem.Allocator) void {
+         switch (self) {
+             .incoming_message => |parsed_message| parsed_message.deinit(),
+             .generate_diagnostics => |uri| allocator.free(uri),
+-            .run_build_on_save => {},
+         }
+     }
+ 
+@@ -174,15 +174,12 @@ const Job = union(enum) {
+         /// this `Job` requires shared access to `Server` and `DocumentStore`
+         /// other non exclusive jobs can be processed in parallel
+         shared,
+-        /// this `Job` operates atomically and does not require any synchronisation
+-        atomic,
+     };
+ 
+     fn syncMode(self: Job) SynchronizationMode {
+         return switch (self) {
+             .incoming_message => |parsed_message| if (isBlockingMessage(parsed_message.value)) .exclusive else .shared,
+             .generate_diagnostics => .shared,
+-            .run_build_on_save => .atomic,
+         };
+     }
+ };
+@@ -195,7 +192,11 @@ fn sendToClientResponse(server: *Server, id: lsp.JsonRPCMessage.ID, result: anyt
+     // TODO validate response is from a client to server request
+     // TODO validate result type
+ 
+-    return try server.sendToClientInternal(id, null, null, "result", result);
++    const response: lsp.TypedJsonRPCResponse(@TypeOf(result)) = .{
++        .id = id,
++        .result = result,
++    };
++    return try sendToClientInternal(server.allocator, server.transport, response);
+ }
+ 
+ fn sendToClientRequest(server: *Server, id: lsp.JsonRPCMessage.ID, method: []const u8, params: anytype) error{OutOfMemory}![]u8 {
+@@ -206,7 +207,12 @@ fn sendToClientRequest(server: *Server, id: lsp.JsonRPCMessage.ID, method: []con
+     // TODO validate method is server to client
+     // TODO validate params type
+ 
+-    return try server.sendToClientInternal(id, method, null, "params", params);
++    const request: lsp.TypedJsonRPCRequest(@TypeOf(params)) = .{
++        .id = id,
++        .method = method,
++        .params = params,
++    };
++    return try sendToClientInternal(server.allocator, server.transport, request);
+ }
+ 
+ fn sendToClientNotification(server: *Server, method: []const u8, params: anytype) error{OutOfMemory}![]u8 {
+@@ -217,75 +223,40 @@ fn sendToClientNotification(server: *Server, method: []const u8, params: anytype
+     // TODO validate method is server to client
+     // TODO validate params type
+ 
+-    return try server.sendToClientInternal(null, method, null, "params", params);
++    const notification: lsp.TypedJsonRPCNotification(@TypeOf(params)) = .{
++        .method = method,
++        .params = params,
++    };
++    return try sendToClientInternal(server.allocator, server.transport, notification);
+ }
+ 
+-fn sendToClientResponseError(server: *Server, id: lsp.JsonRPCMessage.ID, err: ?lsp.JsonRPCMessage.Response.Error) error{OutOfMemory}![]u8 {
++fn sendToClientResponseError(server: *Server, id: lsp.JsonRPCMessage.ID, err: lsp.JsonRPCMessage.Response.Error) error{OutOfMemory}![]u8 {
+     const tracy_zone = tracy.trace(@src());
+     defer tracy_zone.end();
+ 
+-    return try server.sendToClientInternal(id, null, err, "", null);
+-}
++    const response: lsp.JsonRPCMessage = .{
++        .response = .{ .id = id, .result_or_error = .{ .@"error" = err } },
++    };
+ 
+-fn sendToClientInternal(
+-    server: *Server,
+-    maybe_id: ?lsp.JsonRPCMessage.ID,
+-    maybe_method: ?[]const u8,
+-    maybe_err: ?lsp.JsonRPCMessage.Response.Error,
+-    extra_name: []const u8,
+-    extra: anytype,
+-) error{OutOfMemory}![]u8 {
+-    var buffer = std.ArrayListUnmanaged(u8){};
+-    errdefer buffer.deinit(server.allocator);
+-    var writer = buffer.writer(server.allocator);
+-    try writer.writeAll(
+-        \\{"jsonrpc":"2.0"
+-    );
+-    if (maybe_id) |id| {
+-        try writer.writeAll(
+-            \\,"id":
+-        );
+-        try std.json.stringify(id, .{}, writer);
+-    }
+-    if (maybe_method) |method| {
+-        try writer.writeAll(
+-            \\,"method":
+-        );
+-        try std.json.stringify(method, .{}, writer);
+-    }
+-    switch (@TypeOf(extra)) {
+-        void => {},
+-        ?void => {
+-            try writer.print(
+-                \\,"{s}":null
+-            , .{extra_name});
+-        },
+-        else => {
+-            try writer.print(
+-                \\,"{s}":
+-            , .{extra_name});
+-            try std.json.stringify(extra, .{ .emit_null_optional_fields = false }, writer);
+-        },
+-    }
+-    if (maybe_err) |err| {
+-        try writer.writeAll(
+-            \\,"error":
+-        );
+-        try std.json.stringify(err, .{}, writer);
+-    }
+-    try writer.writeByte('}');
++    return try sendToClientInternal(server.allocator, server.transport, response);
++}
+ 
+-    if (server.transport) |transport| {
+-        const tracy_zone_transport = tracy.traceNamed(@src(), "Transport.writeJsonMessage");
+-        defer tracy_zone_transport.end();
++fn sendToClientInternal(allocator: std.mem.Allocator, transport: ?lsp.AnyTransport, message: anytype) error{OutOfMemory}![]u8 {
++    const message_stringified = try std.json.stringifyAlloc(allocator, message, .{
++        .emit_null_optional_fields = false,
++    });
++    errdefer allocator.free(message_stringified);
+ 
+-        if (server.message_tracing) message_logger.debug("sent: {s}", .{buffer.items});
++    if (transport) |t| {
++        const tracy_zone = tracy.traceNamed(@src(), "Transport.writeJsonMessage");
++        defer tracy_zone.end();
+ 
+-        transport.writeJsonMessage(buffer.items) catch |err| {
+-            log.err("failed to write response: {}", .{err});
++        t.writeJsonMessage(message_stringified) catch |err| {
++            log.err("failed to write message: {}", .{err});
+         };
+     }
+-    return buffer.toOwnedSlice(server.allocator);
++
++    return message_stringified;
+ }
+ 
+ fn showMessage(
+@@ -323,8 +294,8 @@ fn showMessage(
+     }
+ }
+ 
+-fn initAnalyser(server: *Server, handle: ?*DocumentStore.Handle) Analyser {
+-    return Analyser.init(
++pub fn initAnalyser(server: *Server, handle: ?*DocumentStore.Handle) Analyser {
++    return .init(
+         server.allocator,
+         &server.document_store,
+         &server.ip,
+@@ -332,15 +303,19 @@ fn initAnalyser(server: *Server, handle: ?*DocumentStore.Handle) Analyser {
+     );
+ }
+ 
+-fn getAutofixMode(server: *Server) enum {
+-    on_save,
++pub fn getAutofixMode(server: *Server) enum {
++    /// Autofix is implemented by providing `source.fixall` code actions.
++    @"source.fixall",
++    /// Autofix is implemented using `textDocument/willSaveWaitUntil`.
++    /// Requires `force_autofix` to be enabled.
+     will_save_wait_until,
+-    fixall,
++    /// Autofix is implemented by send a `workspace/applyEdit` request after receiving a `textDocument/didSave` notification.
++    /// Requires `force_autofix` to be enabled.
++    on_save,
+     none,
+ } {
+-    if (!server.config.enable_autofix) return .none;
+-    // TODO https://github.com/zigtools/zls/issues/1093
+-    // if (server.client_capabilities.supports_code_action_fixall) return .fixall;
++    if (server.client_capabilities.supports_code_action_fixall) return .@"source.fixall";
++    if (!server.config.force_autofix) return .none;
+     if (server.client_capabilities.supports_apply_edits) {
+         if (server.client_capabilities.supports_will_save_wait_until) return .will_save_wait_until;
+         return .on_save;
+@@ -350,87 +325,75 @@ fn getAutofixMode(server: *Server) enum {
+ 
+ /// caller owns returned memory.
+ fn autofix(server: *Server, arena: std.mem.Allocator, handle: *DocumentStore.Handle) error{OutOfMemory}!std.ArrayListUnmanaged(types.TextEdit) {
+-    if (handle.tree.errors.len != 0) return .{};
++    if (handle.tree.errors.len != 0) return .empty;
++    if (handle.tree.mode == .zon) return .empty;
+ 
+-    var diagnostics = std.ArrayListUnmanaged(types.Diagnostic){};
+-    try diagnostics_gen.getAstCheckDiagnostics(server, arena, handle, &diagnostics);
+-    if (diagnostics.items.len == 0) return .{};
++    var error_bundle = try diagnostics_gen.getAstCheckDiagnostics(server, handle);
++    defer error_bundle.deinit(server.allocator);
++    if (error_bundle.errorMessageCount() == 0) return .empty;
+ 
+     var analyser = server.initAnalyser(handle);
+     defer analyser.deinit();
+ 
+-    var builder = code_actions.Builder{
++    var builder: code_actions.Builder = .{
+         .arena = arena,
+         .analyser = &analyser,
+         .handle = handle,
+         .offset_encoding = server.offset_encoding,
++        .only_kinds = .init(.{
++            .@"source.fixAll" = true,
++        }),
+     };
+ 
+-    var actions = std.ArrayListUnmanaged(types.CodeAction){};
+-    var remove_capture_actions = std.AutoHashMapUnmanaged(types.Range, void){};
+-    for (diagnostics.items) |diagnostic| {
+-        try builder.generateCodeAction(diagnostic, &actions, &remove_capture_actions);
++    try builder.generateCodeAction(error_bundle);
++    for (builder.actions.items) |action| {
++        std.debug.assert(action.kind.?.eql(.@"source.fixAll")); // We request only source.fixall code actions
+     }
+ 
+-    var text_edits = std.ArrayListUnmanaged(types.TextEdit){};
+-    for (actions.items) |action| {
+-        std.debug.assert(action.kind != null);
+-        std.debug.assert(action.edit != null);
+-        std.debug.assert(action.edit.?.changes != null);
+-
+-        if (action.kind.? != .@"source.fixAll") continue;
+-
+-        const changes = action.edit.?.changes.?.map;
+-        if (changes.count() != 1) continue;
+-
+-        const edits: []const types.TextEdit = changes.get(handle.uri) orelse continue;
+-
+-        try text_edits.appendSlice(arena, edits);
+-    }
+-
+-    return text_edits;
++    defer builder.fixall_text_edits = .empty;
++    return builder.fixall_text_edits;
+ }
+ 
+ fn initializeHandler(server: *Server, arena: std.mem.Allocator, request: types.InitializeParams) Error!types.InitializeResult {
+     var skip_set_fixall = false;
++    var support_full_semantic_tokens = true;
+ 
+     if (request.clientInfo) |clientInfo| {
+         server.client_capabilities.client_name = try server.allocator.dupe(u8, clientInfo.name);
+ 
+-        if (std.mem.eql(u8, clientInfo.name, "Sublime Text LSP")) {
++        if (std.mem.startsWith(u8, clientInfo.name, "Visual Studio Code") or
++            std.mem.startsWith(u8, clientInfo.name, "VSCodium") or
++            std.mem.startsWith(u8, clientInfo.name, "Code - OSS"))
++        {
++            // VS Code doesn't really utilize `textDocument/semanticTokens/range`.
++            // This will cause some visual artifacts when scrolling through the
++            // document quickly but will considerably improve performance
++            // especially on large files.
++            support_full_semantic_tokens = false;
++        } else if (std.mem.eql(u8, clientInfo.name, "Sublime Text LSP")) {
+             server.client_capabilities.max_detail_length = 256;
+-            // TODO investigate why fixall doesn't work in sublime text
++        } else if (std.mem.startsWith(u8, clientInfo.name, "emacs")) {
++            // Assumes that `emacs` means `emacs-lsp/lsp-mode`. Eglot uses `Eglot`.
++
++            // https://github.com/emacs-lsp/lsp-mode/issues/1842
+             server.client_capabilities.supports_code_action_fixall = false;
+             skip_set_fixall = true;
+-        } else if (std.mem.eql(u8, clientInfo.name, "Visual Studio Code")) {
+-            server.client_capabilities.supports_code_action_fixall = true;
+-            skip_set_fixall = true;
+         }
+     }
+ 
+     if (request.capabilities.general) |general| {
+-        var supports_utf8 = false;
+-        var supports_utf16 = false;
+-        var supports_utf32 = false;
+         if (general.positionEncodings) |position_encodings| {
+-            for (position_encodings) |encoding| {
++            server.offset_encoding = outer: for (position_encodings) |encoding| {
+                 switch (encoding) {
+-                    .@"utf-8" => supports_utf8 = true,
+-                    .@"utf-16" => supports_utf16 = true,
+-                    .@"utf-32" => supports_utf32 = true,
++                    .@"utf-8" => break :outer .@"utf-8",
++                    .@"utf-16" => break :outer .@"utf-16",
++                    .@"utf-32" => break :outer .@"utf-32",
+                     .custom_value => {},
+                 }
+-            }
+-        }
+-
+-        if (supports_utf8) {
+-            server.offset_encoding = .@"utf-8";
+-        } else if (supports_utf32) {
+-            server.offset_encoding = .@"utf-32";
+-        } else {
+-            server.offset_encoding = .@"utf-16";
++            } else server.offset_encoding;
+         }
+     }
++    server.diagnostics_collection.offset_encoding = server.offset_encoding;
+ 
+     if (request.capabilities.textDocument) |textDocument| {
+         server.client_capabilities.supports_publish_diagnostics = textDocument.publishDiagnostics != null;
+@@ -478,19 +441,14 @@ fn initializeHandler(server: *Server, arena: std.mem.Allocator, request: types.I
+             }
+         }
+         if (textDocument.synchronization) |synchronization| {
+-            server.client_capabilities.supports_will_save = synchronization.willSave orelse false;
+             server.client_capabilities.supports_will_save_wait_until = synchronization.willSaveWaitUntil orelse false;
+         }
+-        if (textDocument.codeAction) |codeaction| {
+-            if (codeaction.codeActionLiteralSupport) |literalSupport| {
+-                if (!skip_set_fixall) {
+-                    for (literalSupport.codeActionKind.valueSet) |code_action_kind| {
+-                        if (code_action_kind.eql(.@"source.fixAll")) {
+-                            server.client_capabilities.supports_code_action_fixall = true;
+-                            break;
+-                        }
+-                    }
+-                }
++        if (textDocument.codeAction) |_| {
++            if (!skip_set_fixall) {
++                // Some clients do not specify `source.fixAll` in
++                // `textDocument.codeAction.?.codeActionLiteralSupport.?.codeActionKind.valueSet`
++                // so we assume they support it if they support code actions in general.
++                server.client_capabilities.supports_code_action_fixall = true;
+             }
+         }
+         if (textDocument.definition) |definition| {
+@@ -513,6 +471,12 @@ fn initializeHandler(server: *Server, arena: std.mem.Allocator, request: types.I
+         }
+     }
+ 
++    if (request.capabilities.window) |window| {
++        if (window.workDoneProgress) |wdp| {
++            server.document_store.lsp_capabilities.supports_work_done_progress = wdp;
++        }
++    }
++
+     if (request.capabilities.workspace) |workspace| {
+         server.client_capabilities.supports_apply_edits = workspace.applyEdit orelse false;
+         server.client_capabilities.supports_configuration = workspace.configuration orelse false;
+@@ -521,36 +485,32 @@ fn initializeHandler(server: *Server, arena: std.mem.Allocator, request: types.I
+                 server.client_capabilities.supports_workspace_did_change_configuration_dynamic_registration = true;
+             }
+         }
+-    }
+-
+-    if (request.workspaceFolders) |workspace_folders| {
+-        server.client_capabilities.workspace_folders = try server.allocator.alloc(types.URI, workspace_folders.len);
+-        @memset(server.client_capabilities.workspace_folders, "");
+-        for (server.client_capabilities.workspace_folders, workspace_folders) |*dest, src| {
+-            dest.* = try server.allocator.dupe(u8, src.uri);
++        if (workspace.semanticTokens) |workspace_semantic_tokens| {
++            server.document_store.lsp_capabilities.supports_semantic_tokens_refresh = workspace_semantic_tokens.refreshSupport orelse false;
+         }
+-    }
+-
+-    if (request.trace) |trace| {
+-        // To support --enable-message-tracing, only allow turning this on here
+-        if (trace != .off) {
+-            server.message_tracing = true;
++        if (workspace.inlayHint) |inlay_hint| {
++            server.document_store.lsp_capabilities.supports_inlay_hints_refresh = inlay_hint.refreshSupport orelse false;
+         }
+     }
+ 
+     if (request.clientInfo) |clientInfo| {
+         log.info("Client Info:      {s}-{s}", .{ clientInfo.name, clientInfo.version orelse "<no version>" });
+     }
++    log.info("Autofix Mode:     {s}", .{@tagName(server.getAutofixMode())});
+     log.debug("Offset Encoding:  {s}", .{@tagName(server.offset_encoding)});
+ 
+-    for (server.client_capabilities.workspace_folders) |uri| {
+-        log.info("Workspace Folder: '{s}'", .{uri});
++    if (request.workspaceFolders) |workspace_folders| {
++        for (workspace_folders) |src| {
++            try server.addWorkspace(src.uri);
++        }
+     }
+ 
+     server.status = .initializing;
+ 
+     if (request.initializationOptions) |initialization_options| {
+-        if (std.json.parseFromValueLeaky(Config, arena, initialization_options, .{})) |new_cfg| {
++        if (std.json.parseFromValueLeaky(Config, arena, initialization_options, .{
++            .ignore_unknown_fields = true,
++        })) |new_cfg| {
+             try server.updateConfiguration2(new_cfg, .{});
+         } else |err| {
+             log.err("failed to read initialization_options: {}", .{err});
+@@ -603,19 +563,18 @@ fn initializeHandler(server: *Server, arena: std.mem.Allocator, request: types.I
+                     .openClose = true,
+                     .change = .Incremental,
+                     .save = .{ .bool = true },
+-                    .willSave = true,
+                     .willSaveWaitUntil = true,
+                 },
+             },
+             .renameProvider = .{ .bool = true },
+             .completionProvider = .{
+                 .resolveProvider = false,
+-                .triggerCharacters = &[_][]const u8{ ".", ":", "@", "]", "/" },
++                .triggerCharacters = &.{ ".", ":", "@", "]", "\"", "/" },
+                 .completionItem = .{ .labelDetailsSupport = true },
+             },
+             .documentHighlightProvider = .{ .bool = true },
+             .hoverProvider = .{ .bool = true },
+-            .codeActionProvider = .{ .bool = true },
++            .codeActionProvider = .{ .CodeActionOptions = .{ .codeActionKinds = code_actions.supported_code_actions } },
+             .declarationProvider = .{ .bool = true },
+             .definitionProvider = .{ .bool = true },
+             .typeDefinitionProvider = .{ .bool = true },
+@@ -636,7 +595,7 @@ fn initializeHandler(server: *Server, arena: std.mem.Allocator, request: types.I
+             },
+             .semanticTokensProvider = .{
+                 .SemanticTokensOptions = .{
+-                    .full = .{ .bool = true },
++                    .full = .{ .bool = support_full_semantic_tokens },
+                     .range = .{ .bool = true },
+                     .legend = .{
+                         .tokenTypes = std.meta.fieldNames(semantic_tokens.TokenType),
+@@ -662,8 +621,10 @@ fn initializedHandler(server: *Server, _: std.mem.Allocator, notification: types
+         try server.registerCapability("workspace/didChangeConfiguration");
+     }
+ 
+-    if (server.client_capabilities.supports_configuration)
++    if (server.client_capabilities.supports_configuration) {
+         try server.requestConfiguration();
++        // TODO if the `workspace/configuration` request fails to be handled, build on save will not be started
++    }
+ 
+     if (std.crypto.random.intRangeLessThan(usize, 0, 32768) == 0) {
+         server.showMessage(.Warning, "HELP ME, I AM STUCK INSIDE AN LSP!", .{});
+@@ -683,16 +644,6 @@ fn exitHandler(server: *Server, _: std.mem.Allocator, _: void) Error!void {
+     };
+ }
+ 
+-fn cancelRequestHandler(server: *Server, _: std.mem.Allocator, request: types.CancelParams) Error!void {
+-    _ = server;
+-    _ = request;
+-    // TODO implement $/cancelRequest
+-}
+-
+-fn setTraceHandler(server: *Server, _: std.mem.Allocator, request: types.SetTraceParams) Error!void {
+-    server.message_tracing = request.value != .off;
+-}
+-
+ fn registerCapability(server: *Server, method: []const u8) Error!void {
+     const id = try std.fmt.allocPrint(server.allocator, "register-{s}", .{method});
+     defer server.allocator.free(id);
+@@ -703,7 +654,7 @@ fn registerCapability(server: *Server, method: []const u8) Error!void {
+         .{ .string = id },
+         "client/registerCapability",
+         types.RegistrationParams{ .registrations = &.{
+-            types.Registration{
++            .{
+                 .id = id,
+                 .method = method,
+             },
+@@ -750,15 +701,18 @@ fn handleConfiguration(server: *Server, json: std.json.Value) error{OutOfMemory}
+         },
+     };
+ 
+-    var arena_allocator = std.heap.ArenaAllocator.init(server.allocator);
++    var arena_allocator: std.heap.ArenaAllocator = .init(server.allocator);
+     defer arena_allocator.deinit();
+     const arena = arena_allocator.allocator();
+ 
+     var new_config: configuration.Configuration = .{};
+ 
+     inline for (fields, result) |field, json_value| {
++        var runtime_known_field_name: []const u8 = ""; // avoid unnecessary function instantiations of `std.fmt.format`
++        runtime_known_field_name = field.name;
++
+         const maybe_new_value = std.json.parseFromValueLeaky(field.type, arena, json_value, .{}) catch |err| blk: {
+-            log.err("failed to parse configuration option '{s}': {}", .{ field.name, err });
++            log.err("failed to parse configuration option '{s}': {}", .{ runtime_known_field_name, err });
+             break :blk null;
+         };
+         if (maybe_new_value) |new_value| {
+@@ -771,38 +725,138 @@ fn handleConfiguration(server: *Server, json: std.json.Value) error{OutOfMemory}
+     };
+ }
+ 
+-fn didChangeWorkspaceFoldersHandler(server: *Server, arena: std.mem.Allocator, notification: types.DidChangeWorkspaceFoldersParams) Error!void {
+-    _ = arena;
++const Workspace = struct {
++    uri: types.URI,
++    build_on_save: if (BuildOnSaveSupport.isSupportedComptime()) ?BuildOnSave else void,
++    build_on_save_mode: if (BuildOnSaveSupport.isSupportedComptime()) ?enum { watch, manual } else void,
+ 
+-    var folders = std.ArrayListUnmanaged(types.URI).fromOwnedSlice(server.client_capabilities.workspace_folders);
+-    errdefer folders.deinit(server.allocator);
++    fn init(server: *Server, uri: types.URI) error{OutOfMemory}!Workspace {
++        const duped_uri = try server.allocator.dupe(u8, uri);
++        errdefer server.allocator.free(duped_uri);
+ 
+-    var i: usize = 0;
+-    while (i < folders.items.len) {
+-        const uri = folders.items[i];
+-        for (notification.event.removed) |removed| {
+-            if (std.mem.eql(u8, removed.uri, uri)) {
+-                server.allocator.free(folders.swapRemove(i));
+-                break;
+-            }
++        return .{
++            .uri = duped_uri,
++            .build_on_save = if (BuildOnSaveSupport.isSupportedComptime()) null else {},
++            .build_on_save_mode = if (BuildOnSaveSupport.isSupportedComptime()) null else {},
++        };
++    }
++
++    fn deinit(workspace: *Workspace, allocator: std.mem.Allocator) void {
++        if (BuildOnSaveSupport.isSupportedComptime()) {
++            if (workspace.build_on_save) |*build_on_save| build_on_save.deinit();
++        }
++        allocator.free(workspace.uri);
++    }
++
++    fn sendManualWatchUpdate(workspace: *Workspace) void {
++        comptime std.debug.assert(BuildOnSaveSupport.isSupportedComptime());
++
++        const build_on_save = if (workspace.build_on_save) |*build_on_save| build_on_save else return;
++        const mode = workspace.build_on_save_mode orelse return;
++        if (mode != .manual) return;
++
++        build_on_save.sendManualWatchUpdate();
++    }
++
++    fn refreshBuildOnSave(workspace: *Workspace, args: struct {
++        server: *Server,
++        /// Whether the build on save process should be restarted if it is already running.
++        restart: bool,
++    }) error{OutOfMemory}!void {
++        comptime std.debug.assert(BuildOnSaveSupport.isSupportedComptime());
++
++        if (args.server.runtime_zig_version) |runtime_zig_version| {
++            workspace.build_on_save_mode = switch (BuildOnSaveSupport.isSupportedRuntime(runtime_zig_version)) {
++                .supported => .watch,
++                // If if build on save has been explicitly enabled, fallback to the implementation with manual updates
++                else => if (args.server.config.enable_build_on_save orelse false) .manual else null,
++            };
+         } else {
+-            i += 1;
++            workspace.build_on_save_mode = null;
+         }
++
++        const build_on_save_supported = workspace.build_on_save_mode != null;
++        const build_on_save_wanted = args.server.config.enable_build_on_save orelse true;
++        const enable = build_on_save_supported and build_on_save_wanted;
++
++        if (workspace.build_on_save) |*build_on_save| {
++            if (enable and !args.restart) return;
++            log.debug("stopped Build-On-Save for '{s}'", .{workspace.uri});
++            build_on_save.deinit();
++            workspace.build_on_save = null;
++        }
++
++        if (!enable) return;
++
++        const zig_exe_path = args.server.config.zig_exe_path orelse return;
++        const zig_lib_path = args.server.config.zig_lib_path orelse return;
++        const build_runner_path = args.server.config.build_runner_path orelse return;
++
++        const workspace_path = @import("uri.zig").parse(args.server.allocator, workspace.uri) catch |err| {
++            log.err("failed to parse URI '{s}': {}", .{ workspace.uri, err });
++            return;
++        };
++        defer args.server.allocator.free(workspace_path);
++
++        std.debug.assert(workspace.build_on_save == null);
++        workspace.build_on_save = BuildOnSave.init(.{
++            .allocator = args.server.allocator,
++            .workspace_path = workspace_path,
++            .build_on_save_args = args.server.config.build_on_save_args,
++            .check_step_only = args.server.config.enable_build_on_save == null,
++            .zig_exe_path = zig_exe_path,
++            .zig_lib_path = zig_lib_path,
++            .build_runner_path = build_runner_path,
++            .collection = &args.server.diagnostics_collection,
++        }) catch |err| {
++            log.err("failed to initilize Build-On-Save for '{s}': {}", .{ workspace.uri, err });
++            return;
++        };
++
++        log.info("trying to start Build-On-Save for '{s}'", .{workspace.uri});
+     }
++};
++
++fn addWorkspace(server: *Server, uri: types.URI) error{OutOfMemory}!void {
++    try server.workspaces.ensureUnusedCapacity(server.allocator, 1);
++    server.workspaces.appendAssumeCapacity(try Workspace.init(server, uri));
++    log.info("added Workspace Folder: {s}", .{uri});
+ 
+-    try folders.ensureUnusedCapacity(server.allocator, notification.event.added.len);
+-    for (notification.event.added) |added| {
+-        folders.appendAssumeCapacity(try server.allocator.dupe(u8, added.uri));
++    if (BuildOnSaveSupport.isSupportedComptime() and
++        // Don't initialize build on save until initialization finished.
++        // If the client supports the `workspace/configuration` request, wait
++        // until we have received workspace configuration from the server.
++        (server.status == .initialized and !server.client_capabilities.supports_configuration))
++    {
++        try server.workspaces.items[server.workspaces.items.len - 1].refreshBuildOnSave(.{
++            .server = server,
++            .restart = false,
++        });
+     }
++}
+ 
+-    server.client_capabilities.workspace_folders = try folders.toOwnedSlice(server.allocator);
++fn removeWorkspace(server: *Server, uri: types.URI) void {
++    for (server.workspaces.items, 0..) |workspace, i| {
++        if (std.mem.eql(u8, workspace.uri, uri)) {
++            var removed_workspace = server.workspaces.swapRemove(i);
++            removed_workspace.deinit(server.allocator);
++            log.info("removed Workspace Folder: {s}", .{uri});
++            break;
++        }
++    } else {
++        log.warn("could not remove Workspace Folder: {s}", .{uri});
++    }
++}
++
++fn didChangeWorkspaceFoldersHandler(server: *Server, arena: std.mem.Allocator, notification: types.DidChangeWorkspaceFoldersParams) Error!void {
++    _ = arena;
+ 
+     for (notification.event.added) |folder| {
+-        log.info("added Workspace Folder: {s}", .{folder.uri});
++        try server.addWorkspace(folder.uri);
+     }
+ 
+     for (notification.event.removed) |folder| {
+-        log.info("removed Workspace Folder: {s}", .{folder.uri});
++        server.removeWorkspace(folder.uri);
+     }
+ }
+ 
+@@ -849,7 +903,7 @@ pub fn updateConfiguration2(
+ 
+ pub fn updateConfiguration(
+     server: *Server,
+-    new_config: configuration.Configuration,
++    param_new_config: configuration.Configuration,
+     options: UpdateConfigurationOptions,
+ ) error{OutOfMemory}!void {
+     const tracy_zone = tracy.trace(@src());
+@@ -859,17 +913,21 @@ pub fn updateConfiguration(
+     defer server.config_arena = config_arena_allocator.state;
+     const config_arena = config_arena_allocator.allocator();
+ 
+-    var new_cfg: configuration.Configuration = .{};
++    var new_config: configuration.Configuration = param_new_config;
++    server.validateConfiguration(&new_config);
++
+     inline for (std.meta.fields(Config)) |field| {
+-        @field(new_cfg, field.name) = if (@field(new_config, field.name)) |new_value| new_value else @field(server.config, field.name);
++        @field(new_config, field.name) = if (@field(new_config, field.name)) |new_value|
++            new_value
++        else
++            @field(server.config, field.name);
+     }
+ 
+-    server.validateConfiguration(&new_cfg);
+-
+     const resolve_result: ResolveConfigurationResult = blk: {
+         if (!options.resolve) break :blk ResolveConfigurationResult.unresolved;
+-        const resolve_result = try resolveConfiguration(server.allocator, config_arena, &new_cfg);
+-        server.validateConfiguration(&new_cfg);
++        const resolve_result = try resolveConfiguration(server.allocator, config_arena, &new_config);
++        server.validateConfiguration(&new_config);
++        server.runtime_zig_version = resolve_result.zig_runtime_version;
+         break :blk resolve_result;
+     };
+     defer resolve_result.deinit();
+@@ -878,18 +936,10 @@ pub fn updateConfiguration(
+     //                        apply changes
+     // <---------------------------------------------------------->
+ 
+-    const new_zig_exe_path =
+-        new_config.zig_exe_path != null and
+-        (server.config.zig_exe_path == null or !std.mem.eql(u8, server.config.zig_exe_path.?, new_config.zig_exe_path.?));
+-    const new_zig_lib_path =
+-        new_config.zig_lib_path != null and
+-        (server.config.zig_lib_path == null or !std.mem.eql(u8, server.config.zig_lib_path.?, new_config.zig_lib_path.?));
+-    const new_build_runner_path =
+-        new_config.build_runner_path != null and
+-        (server.config.build_runner_path == null or !std.mem.eql(u8, server.config.build_runner_path.?, new_config.build_runner_path.?));
++    var has_changed: [std.meta.fields(Config).len]bool = @splat(false);
+ 
+-    inline for (std.meta.fields(Config)) |field| {
+-        if (@field(new_cfg, field.name)) |new_value| {
++    inline for (std.meta.fields(Config), 0..) |field, field_index| {
++        if (@field(new_config, field.name)) |new_value| {
+             const old_value_maybe_optional = @field(server.config, field.name);
+ 
+             const override_value = blk: {
+@@ -912,7 +962,10 @@ pub fn updateConfiguration(
+             };
+ 
+             if (override_value) {
+-                log.info("Set config option '{s}' to {}", .{ field.name, std.json.fmt(new_value, .{}) });
++                var runtime_known_field_name: []const u8 = ""; // avoid unnecessary function instantiations of `std.fmt.format`
++                runtime_known_field_name = field.name;
++                log.info("Set config option '{s}' to {}", .{ runtime_known_field_name, std.json.fmt(new_value, .{}) });
++                has_changed[field_index] = true;
+                 @field(server.config, field.name) = switch (@TypeOf(new_value)) {
+                     []const []const u8 => blk: {
+                         const copy = try config_arena.alloc([]const u8, new_value.len);
+@@ -926,13 +979,42 @@ pub fn updateConfiguration(
+         }
+     }
+ 
++    const new_zig_exe_path = has_changed[std.meta.fieldIndex(Config, "zig_exe_path").?];
++    const new_zig_lib_path = has_changed[std.meta.fieldIndex(Config, "zig_lib_path").?];
++    const new_build_runner_path = has_changed[std.meta.fieldIndex(Config, "build_runner_path").?];
++    const new_enable_build_on_save = has_changed[std.meta.fieldIndex(Config, "enable_build_on_save").?];
++    const new_build_on_save_args = has_changed[std.meta.fieldIndex(Config, "build_on_save_args").?];
++    const new_force_autofix = has_changed[std.meta.fieldIndex(Config, "force_autofix").?];
++
+     server.document_store.config = DocumentStore.Config.fromMainConfig(server.config);
+ 
+     if (new_zig_exe_path or new_build_runner_path) blk: {
+         if (!std.process.can_spawn) break :blk;
+ 
+         for (server.document_store.build_files.keys()) |build_file_uri| {
+-            try server.document_store.invalidateBuildFile(build_file_uri);
++            server.document_store.invalidateBuildFile(build_file_uri);
++        }
++    }
++
++    if (BuildOnSaveSupport.isSupportedComptime() and
++        options.resolve and
++        // If the client supports the `workspace/configuration` request, defer
++        // build on save initialization until after we have received workspace
++        // configuration from the server
++        (!server.client_capabilities.supports_configuration or server.status == .initialized))
++    {
++        const should_restart =
++            new_zig_exe_path or
++            new_zig_lib_path or
++            new_build_runner_path or
++            new_enable_build_on_save or
++            new_build_on_save_args;
++
++        for (server.workspaces.items) |*workspace| {
++            try workspace.refreshBuildOnSave(.{
++                .server = server,
++                .restart = should_restart,
++            });
+         }
+     }
+ 
+@@ -941,13 +1023,6 @@ pub fn updateConfiguration(
+             result.deinit(server.document_store.allocator);
+         }
+         server.document_store.cimports.clearAndFree(server.document_store.allocator);
+-
+-        if (std.process.can_spawn and
+-            server.config.enable_build_on_save != false and
+-            server.client_capabilities.supports_publish_diagnostics)
+-        {
+-            try server.pushJob(.run_build_on_save);
+-        }
+     }
+ 
+     if (server.status == .initialized) {
+@@ -957,45 +1032,41 @@ pub fn updateConfiguration(
+                 try server.pushJob(.{ .generate_diagnostics = try server.allocator.dupe(u8, handle.uri) });
+             }
+         }
+-
+-        const json_message = try server.sendToClientRequest(
+-            .{ .string = "semantic_tokens_refresh" },
+-            "workspace/semanticTokens/refresh",
+-            {},
+-        );
+-        server.allocator.free(json_message);
+     }
+ 
+     // <---------------------------------------------------------->
+     //  don't modify config options after here, only show messages
+     // <---------------------------------------------------------->
+ 
++    // TODO there should a way to suppress this message
+     if (std.process.can_spawn and server.status == .initialized and server.config.zig_exe_path == null) {
+-        // TODO there should a way to suppress this message
+         server.showMessage(.Warning, "zig executable could not be found", .{});
++    } else if (std.process.can_spawn and server.status == .initialized and server.config.zig_lib_path == null) {
++        server.showMessage(.Warning, "zig standard library directory could not be resolved", .{});
+     }
+ 
+     switch (resolve_result.build_runner_version) {
+         .resolved, .unresolved_dont_error => {},
+-        .unresolved => {
++        .unresolved => blk: {
++            if (!options.resolve) break :blk;
++            if (server.status != .initialized) break :blk;
++
+             const zig_version = resolve_result.zig_runtime_version.?;
+             const zls_version = build_options.version;
+ 
+             const zig_version_is_tagged = zig_version.pre == null and zig_version.build == null;
+             const zls_version_is_tagged = zls_version.pre == null and zls_version.build == null;
+ 
+-            if (zig_builtin.is_test) {
+-                // This has test coverage in `src/build_runner/BuildRunnerVersion.zig`
+-            } else if (zig_version_is_tagged) {
++            if (zig_version_is_tagged) {
+                 server.showMessage(
+                     .Warning,
+-                    "Zig {} should be used with ZLS {}.{}.* but ZLS {} is being used.",
+-                    .{ zig_version, zig_version.major, zig_version.minor, zls_version },
++                    "ZLS {} does not support Zig {}. A ZLS {}.{} release should be used instead.",
++                    .{ zls_version, zig_version, zig_version.major, zig_version.minor },
+                 );
+             } else if (zls_version_is_tagged) {
+                 server.showMessage(
+                     .Warning,
+-                    "ZLS {} should be used with Zig {}.{}.* but found Zig {}.",
++                    "ZLS {} should be used with a Zig {}.{} release but found Zig {}.",
+                     .{ zls_version, zls_version.major, zls_version.minor, zig_version },
+                 );
+             } else {
+@@ -1012,22 +1083,35 @@ pub fn updateConfiguration(
+         if (!std.process.can_spawn) {
+             log.info("'prefer_ast_check_as_child_process' is ignored because your OS can't spawn a child process", .{});
+         } else if (server.status == .initialized and server.config.zig_exe_path == null) {
+-            log.info("'prefer_ast_check_as_child_process' is ignored because Zig could not be found", .{});
++            log.warn("'prefer_ast_check_as_child_process' is ignored because Zig could not be found", .{});
+         }
+     }
+ 
+     if (server.config.enable_build_on_save orelse false) {
+-        if (!std.process.can_spawn) {
+-            log.info("'enable_build_on_save' is ignored because your OS can't spawn a child process", .{});
+-        } else if (server.status == .initialized and server.config.zig_exe_path == null) {
+-            log.info("'enable_build_on_save' is ignored because Zig could not be found", .{});
++        if (!BuildOnSaveSupport.isSupportedComptime()) {
++            // This message is not very helpful but it relatively uncommon to happen anyway.
++            log.info("'enable_build_on_save' is ignored because build on save is not supported by this ZLS build", .{});
++        } else if (server.status == .initialized and (server.config.zig_exe_path == null or server.config.zig_lib_path == null)) {
++            log.warn("'enable_build_on_save' is ignored because Zig could not be found", .{});
+         } else if (!server.client_capabilities.supports_publish_diagnostics) {
+-            log.info("'enable_build_on_save' is ignored because it is not supported by {s}", .{server.client_capabilities.client_name orelse "your editor"});
++            log.warn("'enable_build_on_save' is ignored because it is not supported by {s}", .{server.client_capabilities.client_name orelse "your editor"});
++        } else if (server.status == .initialized and options.resolve and resolve_result.build_runner_version == .unresolved and server.config.build_runner_path == null) {
++            log.warn("'enable_build_on_save' is ignored because no build runner is available", .{});
++        } else if (server.status == .initialized and options.resolve and resolve_result.zig_runtime_version != null) {
++            switch (BuildOnSaveSupport.isSupportedRuntime(resolve_result.zig_runtime_version.?)) {
++                .supported => {},
++                .invalid_linux_kernel_version => |*utsname_release| log.warn("Build-On-Save cannot run in watch mode because it because the Linux version '{s}' could not be parsed", .{std.mem.sliceTo(utsname_release, 0)}),
++                .unsupported_linux_kernel_version => |kernel_version| log.warn("Build-On-Save cannot run in watch mode because it is not supported by Linux '{}' (requires at least {})", .{ kernel_version, BuildOnSaveSupport.minimum_linux_version }),
++                .unsupported_zig_version => log.warn("Build-On-Save cannot run in watch mode because it is not supported on {s} by Zig {} (requires at least {})", .{ @tagName(zig_builtin.os.tag), resolve_result.zig_runtime_version.?, BuildOnSaveSupport.minimum_zig_version }),
++                .unsupported_os => log.warn("Build-On-Save cannot run in watch mode because it is not supported on {s}", .{@tagName(zig_builtin.os.tag)}),
++            }
+         }
+     }
+ 
+-    if (server.config.enable_autofix and server.getAutofixMode() == .none) {
+-        log.warn("`enable_autofix` is ignored because it is not supported by {s}", .{server.client_capabilities.client_name orelse "your editor"});
++    if (server.config.force_autofix and server.getAutofixMode() == .none) {
++        log.warn("`force_autofix` is ignored because it is not supported by {s}", .{server.client_capabilities.client_name orelse "your editor"});
++    } else if (new_force_autofix) {
++        log.info("Autofix Mode: {s}", .{@tagName(server.getAutofixMode())});
+     }
+ }
+ 
+@@ -1035,46 +1119,60 @@ fn validateConfiguration(server: *Server, config: *configuration.Configuration)
+     const tracy_zone = tracy.trace(@src());
+     defer tracy_zone.end();
+ 
+-    inline for (comptime std.meta.fieldNames(Config)) |field_name| {
+-        const FileCheckInfo = struct {
+-            kind: enum { file, directory },
+-            is_accessible: bool,
+-        };
+-
++    comptime for (std.meta.fieldNames(Config)) |field_name| {
+         @setEvalBranchQuota(2_000);
+-        const file_info: FileCheckInfo = comptime if (std.mem.indexOf(u8, field_name, "path") != null) blk: {
+-            if (std.mem.eql(u8, field_name, "zig_exe_path") or
+-                std.mem.eql(u8, field_name, "builtin_path") or
+-                std.mem.eql(u8, field_name, "build_runner_path"))
+-            {
+-                break :blk .{ .kind = .file, .is_accessible = true };
+-            } else if (std.mem.eql(u8, field_name, "zig_lib_path")) {
+-                break :blk .{ .kind = .directory, .is_accessible = true };
+-            } else if (std.mem.eql(u8, field_name, "global_cache_path")) {
+-                break :blk .{ .kind = .directory, .is_accessible = false };
+-            } else {
+-                @compileError(std.fmt.comptimePrint(
+-                    \\config option '{s}' contains the word 'path'.
+-                    \\Please add config option validation checks above if necessary.
+-                    \\If not necessary, just add a continue switch-case to ignore this error.
+-                    \\
+-                , .{field_name}));
+-            }
+-        } else continue;
++        if (std.mem.indexOf(u8, field_name, "path") == null) continue;
++
++        if (std.mem.eql(u8, field_name, "zig_exe_path")) continue;
++        if (std.mem.eql(u8, field_name, "builtin_path")) continue;
++        if (std.mem.eql(u8, field_name, "build_runner_path")) continue;
++        if (std.mem.eql(u8, field_name, "zig_lib_path")) continue;
++        if (std.mem.eql(u8, field_name, "global_cache_path")) continue;
++
++        @compileError(std.fmt.comptimePrint(
++            \\config option '{s}' contains the word 'path'.
++            \\Please add config option validation checks below if necessary.
++            \\If not necessary, just add a check above to ignore this error.
++            \\
++        , .{field_name}));
++    };
+ 
+-        const is_ok = if (@field(config, field_name)) |path| ok: {
+-            if (path.len == 0) break :ok false;
++    const FileCheckInfo = struct {
++        field_name: []const u8,
++        value: *?[]const u8,
++        kind: enum { file, directory },
++        is_accessible: bool,
++    };
++
++    // zig fmt: off
++    const checks: []const FileCheckInfo = &.{
++        .{ .field_name = "zig_exe_path",      .value = &config.zig_exe_path,      .kind = .file,      .is_accessible = true },
++        .{ .field_name = "builtin_path",      .value = &config.builtin_path,      .kind = .file,      .is_accessible = true },
++        .{ .field_name = "build_runner_path", .value = &config.build_runner_path, .kind = .file,      .is_accessible = true },
++        .{ .field_name = "zig_lib_path",      .value = &config.zig_lib_path,      .kind = .directory, .is_accessible = true },
++        .{ .field_name = "global_cache_path", .value = &config.global_cache_path, .kind = .directory, .is_accessible = false },
++    };
++    // zig fmt: on
++
++    for (checks) |check| {
++        const is_ok = if (check.value.*) |path| ok: {
++            // Convert `""` to `null`
++            if (path.len == 0) {
++                // Thank you Visual Studio Trash Code
++                check.value.* = null;
++                break :ok true;
++            }
+ 
+             if (!std.fs.path.isAbsolute(path)) {
+-                server.showMessage(.Warning, "config option '{s}': expected absolute path but got '{s}'", .{ field_name, path });
++                server.showMessage(.Warning, "config option '{s}': expected absolute path but got '{s}'", .{ check.field_name, path });
+                 break :ok false;
+             }
+ 
+-            switch (file_info.kind) {
++            switch (check.kind) {
+                 .file => {
+                     const file = std.fs.openFileAbsolute(path, .{}) catch |err| {
+-                        if (file_info.is_accessible) {
+-                            server.showMessage(.Warning, "config option '{s}': invalid file path '{s}': {}", .{ field_name, path, err });
++                        if (check.is_accessible) {
++                            server.showMessage(.Warning, "config option '{s}': invalid file path '{s}': {}", .{ check.field_name, path, err });
+                             break :ok false;
+                         }
+                         break :ok true;
+@@ -1087,7 +1185,7 @@ fn validateConfiguration(server: *Server, config: *configuration.Configuration)
+                     };
+                     switch (stat.kind) {
+                         .directory => {
+-                            server.showMessage(.Warning, "config option '{s}': expected file path but '{s}' is a directory", .{ field_name, path });
++                            server.showMessage(.Warning, "config option '{s}': expected file path but '{s}' is a directory", .{ check.field_name, path });
+                             break :ok false;
+                         },
+                         .file => {},
+@@ -1099,8 +1197,8 @@ fn validateConfiguration(server: *Server, config: *configuration.Configuration)
+                 },
+                 .directory => {
+                     var dir = std.fs.openDirAbsolute(path, .{}) catch |err| {
+-                        if (file_info.is_accessible) {
+-                            server.showMessage(.Warning, "config option '{s}': invalid directory path '{s}': {}", .{ field_name, path, err });
++                        if (check.is_accessible) {
++                            server.showMessage(.Warning, "config option '{s}': invalid directory path '{s}': {}", .{ check.field_name, path, err });
+                             break :ok false;
+                         }
+                         break :ok true;
+@@ -1112,7 +1210,7 @@ fn validateConfiguration(server: *Server, config: *configuration.Configuration)
+                     };
+                     switch (stat.kind) {
+                         .file => {
+-                            server.showMessage(.Warning, "config option '{s}': expected directory path but '{s}' is a file", .{ field_name, path });
++                            server.showMessage(.Warning, "config option '{s}': expected directory path but '{s}' is a file", .{ check.field_name, path });
+                             break :ok false;
+                         },
+                         .directory => {},
+@@ -1126,7 +1224,7 @@ fn validateConfiguration(server: *Server, config: *configuration.Configuration)
+         } else true;
+ 
+         if (!is_ok) {
+-            @field(config, field_name) = null;
++            check.value.* = null;
+         }
+     }
+ }
+@@ -1135,8 +1233,10 @@ const ResolveConfigurationResult = struct {
+     zig_env: ?std.json.Parsed(configuration.Env),
+     zig_runtime_version: ?std.SemanticVersion,
+     build_runner_version: union(enum) {
+-        /// no suitable build runner could be resolved based on the `zig_runtime_version`
++        /// If returned, guarantees `zig_runtime_version != null`.
+         resolved: BuildRunnerVersion,
++        /// no suitable build runner could be resolved based on the `zig_runtime_version`
++        /// If returned, guarantees `zig_runtime_version != null`.
+         unresolved,
+         unresolved_dont_error,
+     },
+@@ -1199,7 +1299,8 @@ fn resolveConfiguration(
+             }
+         }
+ 
+-        result.zig_runtime_version = std.SemanticVersion.parse(env.value.version) catch |err| {
++        const version_string_duped = try config_arena.dupe(u8, env.value.version);
++        result.zig_runtime_version = std.SemanticVersion.parse(version_string_duped) catch |err| {
+             log.err("zig env returned a zig version that is an invalid semantic version: {}", .{err});
+             break :blk;
+         };
+@@ -1213,7 +1314,7 @@ fn resolveConfiguration(
+         };
+         defer allocator.free(cache_dir_path);
+ 
+-        config.global_cache_path = try std.fs.path.join(config_arena, &[_][]const u8{ cache_dir_path, "zls" });
++        config.global_cache_path = try std.fs.path.join(config_arena, &.{ cache_dir_path, "zls" });
+ 
+         std.fs.cwd().makePath(config.global_cache_path.?) catch |err| {
+             log.warn("failed to create directory '{s}': {}", .{ config.global_cache_path.?, err });
+@@ -1231,7 +1332,16 @@ fn resolveConfiguration(
+             break :blk;
+         };
+         const build_runner_source = build_runner_version.getBuildRunnerFile();
+-        const build_runner_hash = build_runner_version.getBuildRunnerFileHash();
++        const build_runner_config_source = @embedFile("build_runner/shared.zig");
++
++        const build_runner_hash = get_hash: {
++            const Hasher = std.crypto.auth.siphash.SipHash128(1, 3);
++
++            var hasher: Hasher = .init(&@splat(0));
++            hasher.update(build_runner_source);
++            hasher.update(build_runner_config_source);
++            break :get_hash hasher.finalResult();
++        };
+ 
+         const cache_path = try std.fs.path.join(allocator, &.{ global_cache_path, "build_runner", &std.fmt.bytesToHex(build_runner_hash, .lower) });
+         defer allocator.free(cache_path);
+@@ -1244,17 +1354,19 @@ fn resolveConfiguration(
+         defer cache_dir.close();
+ 
+         cache_dir.writeFile(.{
+-            .sub_path = "BuildConfig.zig",
+-            .data = @embedFile("build_runner/BuildConfig.zig"),
+-        }) catch |err| {
+-            log.err("failed to write file '{s}/BuildConfig.zig': {}", .{ cache_path, err });
++            .sub_path = "shared.zig",
++            .data = build_runner_config_source,
++            .flags = .{ .exclusive = true },
++        }) catch |err| if (err != error.PathAlreadyExists) {
++            log.err("failed to write file '{s}/shared.zig': {}", .{ cache_path, err });
+             break :blk;
+         };
+ 
+         cache_dir.writeFile(.{
+             .sub_path = "build_runner.zig",
+             .data = build_runner_source,
+-        }) catch |err| {
++            .flags = .{ .exclusive = true },
++        }) catch |err| if (err != error.PathAlreadyExists) {
+             log.err("failed to write file '{s}/build_runner.zig': {}", .{ cache_path, err });
+             break :blk;
+         };
+@@ -1277,7 +1389,7 @@ fn resolveConfiguration(
+         const run_result = std.process.Child.run(.{
+             .allocator = allocator,
+             .argv = &argv,
+-            .max_output_bytes = 1024 * 1024 * 50,
++            .max_output_bytes = 16 * 1024 * 1024,
+         }) catch |err| {
+             const args = std.mem.join(allocator, " ", &argv) catch break :blk;
+             log.err("failed to run command '{s}': {}", .{ args, err });
+@@ -1348,21 +1460,14 @@ fn saveDocumentHandler(server: *Server, arena: std.mem.Allocator, notification:
+     const uri = notification.textDocument.uri;
+ 
+     if (std.process.can_spawn and DocumentStore.isBuildFile(uri)) {
+-        try server.document_store.invalidateBuildFile(uri);
+-    }
+-
+-    if (std.process.can_spawn and
+-        server.config.enable_build_on_save != false and
+-        server.client_capabilities.supports_publish_diagnostics)
+-    {
+-        try server.pushJob(.run_build_on_save);
++        server.document_store.invalidateBuildFile(uri);
+     }
+ 
+     if (server.getAutofixMode() == .on_save) {
+         const handle = server.document_store.getHandle(uri) orelse return;
+         var text_edits = try server.autofix(arena, handle);
+ 
+-        var workspace_edit = types.WorkspaceEdit{ .changes = .{} };
++        var workspace_edit: types.WorkspaceEdit = .{ .changes = .{} };
+         try workspace_edit.changes.?.map.putNoClobber(arena, uri, try text_edits.toOwnedSlice(arena));
+ 
+         const json_message = try server.sendToClientRequest(
+@@ -1375,6 +1480,12 @@ fn saveDocumentHandler(server: *Server, arena: std.mem.Allocator, notification:
+         );
+         server.allocator.free(json_message);
+     }
++
++    if (BuildOnSaveSupport.isSupportedComptime()) {
++        for (server.workspaces.items) |*workspace| {
++            workspace.sendManualWatchUpdate();
++        }
++    }
+ }
+ 
+ fn closeDocumentHandler(server: *Server, _: std.mem.Allocator, notification: types.DidCloseTextDocumentParams) error{}!void {
+@@ -1413,6 +1524,9 @@ fn semanticTokensFullHandler(server: *Server, arena: std.mem.Allocator, request:
+ 
+     const handle = server.document_store.getHandle(request.textDocument.uri) orelse return null;
+ 
++    // Workaround: The Ast on .zon files is unusable when an error occured on the root expr
++    if (handle.tree.mode == .zon and handle.tree.errors.len > 0) return null;
++
+     var analyser = server.initAnalyser(handle);
+     defer analyser.deinit();
+     // semantic tokens can be quite expensive to compute on large files
+@@ -1433,6 +1547,10 @@ fn semanticTokensRangeHandler(server: *Server, arena: std.mem.Allocator, request
+     if (server.config.semantic_tokens == .none) return null;
+ 
+     const handle = server.document_store.getHandle(request.textDocument.uri) orelse return null;
++
++    // Workaround: The Ast on .zon files is unusable when an error occured on the root expr
++    if (handle.tree.mode == .zon and handle.tree.errors.len > 0) return null;
++
+     const loc = offsets.rangeToLoc(handle.tree.source, request.range, server.offset_encoding);
+ 
+     var analyser = server.initAnalyser(handle);
+@@ -1450,6 +1568,7 @@ fn semanticTokensRangeHandler(server: *Server, arena: std.mem.Allocator, request
+ 
+ fn completionHandler(server: *Server, arena: std.mem.Allocator, request: types.CompletionParams) Error!lsp.ResultType("textDocument/completion") {
+     const handle = server.document_store.getHandle(request.textDocument.uri) orelse return null;
++    if (handle.tree.mode == .zon) return null;
+ 
+     const source_index = offsets.positionToIndex(handle.tree.source, request.position, server.offset_encoding);
+ 
+@@ -1463,6 +1582,7 @@ fn completionHandler(server: *Server, arena: std.mem.Allocator, request: types.C
+ 
+ fn signatureHelpHandler(server: *Server, arena: std.mem.Allocator, request: types.SignatureHelpParams) Error!?types.SignatureHelp {
+     const handle = server.document_store.getHandle(request.textDocument.uri) orelse return null;
++    if (handle.tree.mode == .zon) return null;
+ 
+     if (request.position.character == 0) return null;
+ 
+@@ -1542,6 +1662,7 @@ fn hoverHandler(server: *Server, arena: std.mem.Allocator, request: types.HoverP
+     if (request.position.character == 0) return null;
+ 
+     const handle = server.document_store.getHandle(request.textDocument.uri) orelse return null;
++    if (handle.tree.mode == .zon) return null;
+     const source_index = offsets.positionToIndex(handle.tree.source, request.position, server.offset_encoding);
+ 
+     const markup_kind: types.MarkupKind = if (server.client_capabilities.hover_supports_md) .markdown else .plaintext;
+@@ -1549,11 +1670,20 @@ fn hoverHandler(server: *Server, arena: std.mem.Allocator, request: types.HoverP
+     var analyser = server.initAnalyser(handle);
+     defer analyser.deinit();
+ 
+-    return hover_handler.hover(&analyser, arena, handle, source_index, markup_kind, server.offset_encoding);
++    return hover_handler.hover(
++        &analyser,
++        arena,
++        handle,
++        source_index,
++        markup_kind,
++        server.offset_encoding,
++        server.client_capabilities.client_name,
++    );
+ }
+ 
+ fn documentSymbolsHandler(server: *Server, arena: std.mem.Allocator, request: types.DocumentSymbolParams) Error!lsp.ResultType("textDocument/documentSymbol") {
+     const handle = server.document_store.getHandle(request.textDocument.uri) orelse return null;
++    if (handle.tree.mode == .zon) return null;
+     return .{
+         .array_of_DocumentSymbol = try document_symbol.getDocumentSymbols(arena, handle.tree, server.offset_encoding),
+     };
+@@ -1589,6 +1719,7 @@ fn documentHighlightHandler(server: *Server, arena: std.mem.Allocator, request:
+ 
+ fn inlayHintHandler(server: *Server, arena: std.mem.Allocator, request: types.InlayHintParams) Error!?[]types.InlayHint {
+     const handle = server.document_store.getHandle(request.textDocument.uri) orelse return null;
++    if (handle.tree.mode == .zon) return null;
+ 
+     // The Language Server Specification does not provide a client capabilities that allows the client to specify the MarkupKind of inlay hints.
+     const hover_kind: types.MarkupKind = if (server.client_capabilities.hover_supports_md) .markdown else .plaintext;
+@@ -1611,31 +1742,38 @@ fn inlayHintHandler(server: *Server, arena: std.mem.Allocator, request: types.In
+ fn codeActionHandler(server: *Server, arena: std.mem.Allocator, request: types.CodeActionParams) Error!lsp.ResultType("textDocument/codeAction") {
+     const handle = server.document_store.getHandle(request.textDocument.uri) orelse return null;
+ 
++    // as of right now, only ast-check errors may get a code action
++    if (handle.tree.errors.len != 0) return null;
++    if (handle.tree.mode == .zon) return null;
++
++    var error_bundle = try diagnostics_gen.getAstCheckDiagnostics(server, handle);
++    defer error_bundle.deinit(server.allocator);
++
+     var analyser = server.initAnalyser(handle);
+     defer analyser.deinit();
+ 
+-    var builder = code_actions.Builder{
++    const only_kinds = if (request.context.only) |kinds| blk: {
++        var set: std.EnumSet(std.meta.Tag(types.CodeActionKind)) = .initEmpty();
++        for (kinds) |kind| {
++            set.setPresent(kind, true);
++        }
++        break :blk set;
++    } else null;
++
++    var builder: code_actions.Builder = .{
+         .arena = arena,
+         .analyser = &analyser,
+         .handle = handle,
+         .offset_encoding = server.offset_encoding,
++        .only_kinds = only_kinds,
+     };
+ 
+-    // as of right now, only ast-check errors may get a code action
+-    var diagnostics = std.ArrayListUnmanaged(types.Diagnostic){};
+-    if (handle.tree.errors.len == 0) {
+-        try diagnostics_gen.getAstCheckDiagnostics(server, arena, handle, &diagnostics);
+-    }
+-
+-    var actions = std.ArrayListUnmanaged(types.CodeAction){};
+-    var remove_capture_actions = std.AutoHashMapUnmanaged(types.Range, void){};
+-    for (diagnostics.items) |diagnostic| {
+-        try builder.generateCodeAction(diagnostic, &actions, &remove_capture_actions);
+-    }
++    try builder.generateCodeAction(error_bundle);
++    try builder.generateCodeActionsInRange(request.range);
+ 
+-    const Result = lsp.types.getRequestMetadata("textDocument/codeAction").?.Result;
+-    const result = try arena.alloc(std.meta.Child(std.meta.Child(Result)), actions.items.len);
+-    for (actions.items, result) |action, *out| {
++    const Result = lsp.ResultType("textDocument/codeAction");
++    const result = try arena.alloc(std.meta.Child(std.meta.Child(Result)), builder.actions.items.len);
++    for (builder.actions.items, result) |action, *out| {
+         out.* = .{ .CodeAction = action };
+     }
+ 
+@@ -1682,8 +1820,6 @@ const HandledRequestParams = union(enum) {
+ const HandledNotificationParams = union(enum) {
+     initialized: types.InitializedParams,
+     exit,
+-    @"$/cancelRequest": types.CancelParams,
+-    @"$/setTrace": types.SetTraceParams,
+     @"textDocument/didOpen": types.DidOpenTextDocumentParams,
+     @"textDocument/didChange": types.DidChangeTextDocumentParams,
+     @"textDocument/didSave": types.DidSaveTextDocumentParams,
+@@ -1727,10 +1863,8 @@ fn isBlockingMessage(msg: Message) bool {
+             .other => return false,
+         },
+         .notification => |notification| switch (notification.params) {
+-            .@"$/cancelRequest" => return false,
+             .initialized,
+             .exit,
+-            .@"$/setTrace",
+             .@"textDocument/didOpen",
+             .@"textDocument/didChange",
+             .@"textDocument/didSave",
+@@ -1748,17 +1882,19 @@ fn isBlockingMessage(msg: Message) bool {
+ pub fn create(allocator: std.mem.Allocator) !*Server {
+     const server = try allocator.create(Server);
+     errdefer server.destroy();
+-    server.* = Server{
++    server.* = .{
+         .allocator = allocator,
+         .config = .{},
+         .document_store = .{
+             .allocator = allocator,
+-            .config = DocumentStore.Config.fromMainConfig(Config{}),
++            .config = .fromMainConfig(.{}),
+             .thread_pool = if (zig_builtin.single_threaded) {} else undefined, // set below
++            .diagnostics_collection = &server.diagnostics_collection,
+         },
+-        .job_queue = std.fifo.LinearFifo(Job, .Dynamic).init(allocator),
++        .job_queue = .init(allocator),
+         .thread_pool = undefined, // set below
+         .wait_group = if (zig_builtin.single_threaded) {} else .{},
++        .diagnostics_collection = .{ .allocator = allocator },
+     };
+ 
+     if (zig_builtin.single_threaded) {
+@@ -1766,7 +1902,7 @@ pub fn create(allocator: std.mem.Allocator) !*Server {
+     } else {
+         try server.thread_pool.init(.{
+             .allocator = allocator,
+-            .n_jobs = 4, // what is a good value here?
++            .n_jobs = @min(4, std.Thread.getCpuCount() catch 1), // what is a good value here?
+         });
+         server.document_store.thread_pool = &server.thread_pool;
+     }
+@@ -1786,11 +1922,20 @@ pub fn destroy(server: *Server) void {
+     server.job_queue.deinit();
+     server.document_store.deinit();
+     server.ip.deinit(server.allocator);
++    for (server.workspaces.items) |*workspace| workspace.deinit(server.allocator);
++    server.workspaces.deinit(server.allocator);
++    server.diagnostics_collection.deinit();
+     server.client_capabilities.deinit(server.allocator);
+     server.config_arena.promote(server.allocator).deinit();
+     server.allocator.destroy(server);
+ }
+ 
++pub fn setTransport(server: *Server, transport: lsp.AnyTransport) void {
++    server.transport = transport;
++    server.diagnostics_collection.transport = transport;
++    server.document_store.transport = transport;
++}
++
+ pub fn keepRunning(server: Server) bool {
+     switch (server.status) {
+         .exiting_success, .exiting_failure => return false,
+@@ -1811,28 +1956,21 @@ pub fn loop(server: *Server) !void {
+         const json_message = try server.transport.?.readJsonMessage(server.allocator);
+         defer server.allocator.free(json_message);
+ 
+-        if (server.message_tracing) message_logger.debug("received: {s}", .{json_message});
+         try server.sendJsonMessage(json_message);
+ 
+         while (server.job_queue.readItem()) |job| {
+             if (zig_builtin.single_threaded) {
+-                server.processJob(job, null);
++                server.processJob(job);
+                 continue;
+             }
+ 
+             switch (job.syncMode()) {
+                 .exclusive => {
+                     server.waitAndWork();
+-                    server.processJob(job, null);
++                    server.processJob(job);
+                 },
+                 .shared => {
+-                    server.wait_group.start();
+-                    errdefer job.deinit(server.allocator);
+-                    try server.thread_pool.spawn(processJob, .{ server, job, &server.wait_group });
+-                },
+-                .atomic => {
+-                    errdefer job.deinit(server.allocator);
+-                    try server.thread_pool.spawn(processJob, .{ server, job, null });
++                    server.thread_pool.spawnWg(&server.wait_group, processJob, .{ server, job });
+                 },
+             }
+         }
+@@ -1867,7 +2005,10 @@ pub fn sendRequestSync(server: *Server, arena: std.mem.Allocator, comptime metho
+     defer tracy_zone.end();
+     tracy_zone.setName(method);
+ 
+-    return switch (comptime std.meta.stringToEnum(std.meta.Tag(HandledRequestParams), method) orelse return null) {
++    const Params = std.meta.Tag(HandledRequestParams);
++    if (!@hasField(Params, method)) return null;
++
++    return switch (@field(Params, method)) {
+         .initialize => try server.initializeHandler(arena, params),
+         .shutdown => try server.shutdownHandler(arena, params),
+         .@"textDocument/willSaveWaitUntil" => try server.willSaveWaitUntilHandler(arena, params),
+@@ -1899,11 +2040,12 @@ pub fn sendNotificationSync(server: *Server, arena: std.mem.Allocator, comptime
+     defer tracy_zone.end();
+     tracy_zone.setName(method);
+ 
+-    return switch (comptime std.meta.stringToEnum(std.meta.Tag(HandledNotificationParams), method) orelse return) {
++    const Params = std.meta.Tag(HandledNotificationParams);
++    if (!@hasField(Params, method)) return null;
++
++    return switch (@field(Params, method)) {
+         .initialized => try server.initializedHandler(arena, params),
+         .exit => try server.exitHandler(arena, params),
+-        .@"$/cancelRequest" => try server.cancelRequestHandler(arena, params),
+-        .@"$/setTrace" => try server.setTraceHandler(arena, params),
+         .@"textDocument/didOpen" => try server.openDocumentHandler(arena, params),
+         .@"textDocument/didChange" => try server.changeDocumentHandler(arena, params),
+         .@"textDocument/didSave" => try server.saveDocumentHandler(arena, params),
+@@ -1941,12 +2083,12 @@ fn processMessage(server: *Server, message: Message) Error!?[]u8 {
+ 
+     try server.validateMessage(message);
+ 
+-    var arena_allocator = std.heap.ArenaAllocator.init(server.allocator);
++    var arena_allocator: std.heap.ArenaAllocator = .init(server.allocator);
+     defer arena_allocator.deinit();
+ 
+     switch (message) {
+         .request => |request| switch (request.params) {
+-            .other => return try server.sendToClientResponse(request.id, null),
++            .other => return try server.sendToClientResponse(request.id, @as(?void, null)),
+             inline else => |params, method| {
+                 const result = try server.sendRequestSync(arena_allocator.allocator(), @tagName(method), params);
+                 return try server.sendToClientResponse(request.id, result);
+@@ -1969,7 +2111,7 @@ fn processMessageReportError(server: *Server, message: Message) ?[]const u8 {
+         }
+ 
+         switch (message) {
+-            .request => |request| return server.sendToClientResponseError(request.id, lsp.JsonRPCMessage.Response.Error{
++            .request => |request| return server.sendToClientResponseError(request.id, .{
+                 .code = @enumFromInt(switch (err) {
+                     error.OutOfMemory => @intFromEnum(types.ErrorCodes.InternalError),
+                     error.ParseError => @intFromEnum(types.ErrorCodes.ParseError),
+@@ -1990,12 +2132,10 @@ fn processMessageReportError(server: *Server, message: Message) ?[]const u8 {
+     };
+ }
+ 
+-fn processJob(server: *Server, job: Job, wait_group: ?*std.Thread.WaitGroup) void {
++fn processJob(server: *Server, job: Job) void {
+     const tracy_zone = tracy.trace(@src());
+     defer tracy_zone.end();
+     tracy_zone.setName(@tagName(job));
+-    defer if (!zig_builtin.single_threaded and wait_group != null) wait_group.?.finish();
+-
+     defer job.deinit(server.allocator);
+ 
+     switch (job) {
+@@ -2005,37 +2145,7 @@ fn processJob(server: *Server, job: Job, wait_group: ?*std.Thread.WaitGroup) voi
+         },
+         .generate_diagnostics => |uri| {
+             const handle = server.document_store.getHandle(uri) orelse return;
+-            var arena_allocator = std.heap.ArenaAllocator.init(server.allocator);
+-            defer arena_allocator.deinit();
+-            const diagnostics = diagnostics_gen.generateDiagnostics(server, arena_allocator.allocator(), handle) catch return;
+-            const json_message = server.sendToClientNotification("textDocument/publishDiagnostics", diagnostics) catch return;
+-            server.allocator.free(json_message);
+-        },
+-        .run_build_on_save => {
+-            if (!std.process.can_spawn) unreachable;
+-
+-            if (server.running_build_on_save_processes.load(.seq_cst) != 0) return;
+-
+-            for (server.client_capabilities.workspace_folders) |workspace_folder_uri| {
+-                _ = server.running_build_on_save_processes.fetchAdd(1, .acq_rel);
+-                defer _ = server.running_build_on_save_processes.fetchSub(1, .acq_rel);
+-
+-                var arena_allocator = std.heap.ArenaAllocator.init(server.allocator);
+-                defer arena_allocator.deinit();
+-                var diagnostic_set = std.StringArrayHashMapUnmanaged(std.ArrayListUnmanaged(types.Diagnostic)){};
+-                diagnostics_gen.generateBuildOnSaveDiagnostics(server, workspace_folder_uri, arena_allocator.allocator(), &diagnostic_set) catch |err| {
+-                    log.err("failed to run build on save on {s}: {}", .{ workspace_folder_uri, err });
+-                    return;
+-                };
+-
+-                for (diagnostic_set.keys(), diagnostic_set.values()) |document_uri, diagnostics| {
+-                    const json_message = server.sendToClientNotification("textDocument/publishDiagnostics", .{
+-                        .uri = document_uri,
+-                        .diagnostics = diagnostics.items,
+-                    }) catch return;
+-                    server.allocator.free(json_message);
+-                }
+-            }
++            diagnostics_gen.generateDiagnostics(server, handle) catch return;
+         },
+     }
+ }
+@@ -2058,6 +2168,7 @@ fn validateMessage(server: *const Server, message: Message) Error!void {
+ 
+     // https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#dollarRequests
+     if (message == .request and std.mem.startsWith(u8, method, "$/")) return error.MethodNotFound;
++    if (message == .notification and std.mem.startsWith(u8, method, "$/")) return;
+ 
+     switch (server.status) {
+         .uninitialized => blk: {
+@@ -2111,6 +2222,10 @@ fn handleResponse(server: *Server, response: lsp.JsonRPCMessage.Response) Error!
+ 
+     if (std.mem.eql(u8, id, "semantic_tokens_refresh")) {
+         //
++    } else if (std.mem.eql(u8, id, "inlay_hints_refresh")) {
++        //
++    } else if (std.mem.eql(u8, id, "progress")) {
++        //
+     } else if (std.mem.startsWith(u8, id, "register")) {
+         //
+     } else if (std.mem.eql(u8, id, "apply_edit")) {
+diff --git a/src/features/code_actions.zig b/src/features/code_actions.zig
+index 429669ed..d7d1d17f 100644
+--- a/src/features/code_actions.zig
++++ b/src/features/code_actions.zig
+@@ -2,8 +2,10 @@
+ 
+ const std = @import("std");
+ const Ast = std.zig.Ast;
++const Token = std.zig.Token;
+ 
+ const DocumentStore = @import("../DocumentStore.zig");
++const DocumentScope = @import("../DocumentScope.zig");
+ const Analyser = @import("../analysis.zig");
+ const ast = @import("../ast.zig");
+ const types = @import("lsp").types;
+@@ -15,65 +17,242 @@ pub const Builder = struct {
+     analyser: *Analyser,
+     handle: *DocumentStore.Handle,
+     offset_encoding: offsets.Encoding,
++    only_kinds: ?std.EnumSet(std.meta.Tag(types.CodeActionKind)),
++
++    actions: std.ArrayListUnmanaged(types.CodeAction) = .empty,
++    fixall_text_edits: std.ArrayListUnmanaged(types.TextEdit) = .empty,
+ 
+     pub fn generateCodeAction(
+         builder: *Builder,
+-        diagnostic: types.Diagnostic,
+-        actions: *std.ArrayListUnmanaged(types.CodeAction),
+-        remove_capture_actions: *std.AutoHashMapUnmanaged(types.Range, void),
++        error_bundle: std.zig.ErrorBundle,
+     ) error{OutOfMemory}!void {
+-        const kind = DiagnosticKind.parse(diagnostic.message) orelse return;
++        const tracy_zone = tracy.trace(@src());
++        defer tracy_zone.end();
+ 
+-        const loc = offsets.rangeToLoc(builder.handle.tree.source, diagnostic.range, builder.offset_encoding);
++        var remove_capture_actions: std.AutoHashMapUnmanaged(types.Range, void) = .empty;
+ 
+-        switch (kind) {
+-            .unused => |id| switch (id) {
+-                .@"function parameter" => try handleUnusedFunctionParameter(builder, actions, loc),
+-                .@"local constant" => try handleUnusedVariableOrConstant(builder, actions, loc),
+-                .@"local variable" => try handleUnusedVariableOrConstant(builder, actions, loc),
+-                .@"switch tag capture", .capture => try handleUnusedCapture(builder, actions, loc, remove_capture_actions),
+-            },
+-            .non_camelcase_fn => try handleNonCamelcaseFunction(builder, actions, loc),
+-            .pointless_discard => try handlePointlessDiscard(builder, actions, loc),
+-            .omit_discard => |id| switch (id) {
+-                .@"error capture; omit it instead" => {},
+-                .@"error capture" => try handleUnusedCapture(builder, actions, loc, remove_capture_actions),
+-            },
+-            // the undeclared identifier may be a discard
+-            .undeclared_identifier => try handlePointlessDiscard(builder, actions, loc),
+-            .unreachable_code => {
+-                // TODO
+-                // autofix: comment out code
+-                // fix: remove code
+-            },
+-            .var_never_mutated => try handleVariableNeverMutated(builder, actions, loc),
++        try handleUnorganizedImport(builder);
++
++        if (error_bundle.errorMessageCount() == 0) return; // `getMessages` can't be called on an empty ErrorBundle
++        for (error_bundle.getMessages()) |msg_index| {
++            const err = error_bundle.getErrorMessage(msg_index);
++            const message = error_bundle.nullTerminatedString(err.msg);
++            const kind = DiagnosticKind.parse(message) orelse continue;
++
++            if (err.src_loc == .none) continue;
++            const src_loc = error_bundle.getSourceLocation(err.src_loc);
++
++            const loc: offsets.Loc = .{
++                .start = src_loc.span_start,
++                .end = src_loc.span_end,
++            };
++
++            switch (kind) {
++                .unused => |id| switch (id) {
++                    .@"function parameter" => try handleUnusedFunctionParameter(builder, loc),
++                    .@"local constant" => try handleUnusedVariableOrConstant(builder, loc),
++                    .@"local variable" => try handleUnusedVariableOrConstant(builder, loc),
++                    .@"switch tag capture", .capture => try handleUnusedCapture(builder, loc, &remove_capture_actions),
++                },
++                .non_camelcase_fn => try handleNonCamelcaseFunction(builder, loc),
++                .pointless_discard => try handlePointlessDiscard(builder, loc),
++                .omit_discard => |id| switch (id) {
++                    .@"error capture; omit it instead" => {},
++                    .@"error capture" => try handleUnusedCapture(builder, loc, &remove_capture_actions),
++                },
++                // the undeclared identifier may be a discard
++                .undeclared_identifier => try handlePointlessDiscard(builder, loc),
++                .unreachable_code => {
++                    // TODO
++                    // autofix: comment out code
++                    // fix: remove code
++                },
++                .var_never_mutated => try handleVariableNeverMutated(builder, loc),
++            }
++        }
++
++        if (builder.fixall_text_edits.items.len != 0) {
++            try builder.actions.append(builder.arena, .{
++                .title = "apply fixall",
++                .kind = .@"source.fixAll",
++                .edit = try builder.createWorkspaceEdit(builder.fixall_text_edits.items),
++            });
++        }
++    }
++
++    /// Returns `false` if the client explicitly specified that they are not interested in this code action kind.
++    fn wantKind(builder: *Builder, kind: std.meta.Tag(types.CodeActionKind)) bool {
++        const only_kinds = builder.only_kinds orelse return true;
++        return only_kinds.contains(kind);
++    }
++
++    pub fn generateCodeActionsInRange(
++        builder: *Builder,
++        range: types.Range,
++    ) error{OutOfMemory}!void {
++        const tracy_zone = tracy.trace(@src());
++        defer tracy_zone.end();
++
++        const tree = builder.handle.tree;
++        const token_tags = tree.tokens.items(.tag);
++
++        const source_index = offsets.positionToIndex(tree.source, range.start, builder.offset_encoding);
++
++        const ctx = try Analyser.getPositionContext(builder.arena, builder.handle.tree, source_index, true);
++        if (ctx != .string_literal) return;
++
++        var token_idx = offsets.sourceIndexToTokenIndex(tree, source_index);
++
++        // if `offsets.sourceIndexToTokenIndex` is called with a source index between two tokens, it will be the token to the right.
++        switch (token_tags[token_idx]) {
++            .string_literal, .multiline_string_literal_line => {},
++            else => token_idx -|= 1,
++        }
++
++        switch (token_tags[token_idx]) {
++            .multiline_string_literal_line => try generateMultilineStringCodeActions(builder, token_idx),
++            .string_literal => try generateStringLiteralCodeActions(builder, token_idx),
++            else => {},
+         }
+     }
+ 
+     pub fn createTextEditLoc(self: *Builder, loc: offsets.Loc, new_text: []const u8) types.TextEdit {
+         const range = offsets.locToRange(self.handle.tree.source, loc, self.offset_encoding);
+-        return types.TextEdit{ .range = range, .newText = new_text };
++        return .{ .range = range, .newText = new_text };
+     }
+ 
+     pub fn createTextEditPos(self: *Builder, index: usize, new_text: []const u8) types.TextEdit {
+         const position = offsets.indexToPosition(self.handle.tree.source, index, self.offset_encoding);
+-        return types.TextEdit{ .range = .{ .start = position, .end = position }, .newText = new_text };
++        return .{ .range = .{ .start = position, .end = position }, .newText = new_text };
+     }
+ 
+     pub fn createWorkspaceEdit(self: *Builder, edits: []const types.TextEdit) error{OutOfMemory}!types.WorkspaceEdit {
+-        var workspace_edit = types.WorkspaceEdit{ .changes = .{} };
++        var workspace_edit: types.WorkspaceEdit = .{ .changes = .{} };
+         try workspace_edit.changes.?.map.putNoClobber(self.arena, self.handle.uri, try self.arena.dupe(types.TextEdit, edits));
+ 
+         return workspace_edit;
+     }
+ };
+ 
++pub fn generateStringLiteralCodeActions(
++    builder: *Builder,
++    token: Ast.TokenIndex,
++) !void {
++    const tracy_zone = tracy.trace(@src());
++    defer tracy_zone.end();
++
++    if (!builder.wantKind(.refactor)) return;
++
++    const tags = builder.handle.tree.tokens.items(.tag);
++    switch (tags[token -| 1]) {
++        // Not covered by position context
++        .keyword_test, .keyword_extern => return,
++        else => {},
++    }
++
++    const token_text = offsets.tokenToSlice(builder.handle.tree, token); // Includes quotes
++    const parsed = std.zig.string_literal.parseAlloc(builder.arena, token_text) catch |err| switch (err) {
++        error.InvalidLiteral => return,
++        else => |other| return other,
++    };
++    // Check for disallowed characters and utf-8 validity
++    for (parsed) |c| {
++        if (c == '\n') continue;
++        if (std.ascii.isControl(c)) return;
++    }
++    if (!std.unicode.utf8ValidateSlice(parsed)) return;
++    const with_slashes = try std.mem.replaceOwned(u8, builder.arena, parsed, "\n", "\n    \\\\"); // Hardcoded 4 spaces
++
++    var result: std.ArrayListUnmanaged(u8) = try .initCapacity(builder.arena, with_slashes.len + 3);
++    result.appendSliceAssumeCapacity("\\\\");
++    result.appendSliceAssumeCapacity(with_slashes);
++    result.appendAssumeCapacity('\n');
++
++    const loc = offsets.tokenToLoc(builder.handle.tree, token);
++    try builder.actions.append(builder.arena, .{
++        .title = "convert to a multiline string literal",
++        .kind = .refactor,
++        .isPreferred = false,
++        .edit = try builder.createWorkspaceEdit(&.{builder.createTextEditLoc(loc, result.items)}),
++    });
++}
++
++pub fn generateMultilineStringCodeActions(
++    builder: *Builder,
++    token: Ast.TokenIndex,
++) !void {
++    const tracy_zone = tracy.trace(@src());
++    defer tracy_zone.end();
++
++    if (!builder.wantKind(.refactor)) return;
++
++    const token_tags = builder.handle.tree.tokens.items(.tag);
++    std.debug.assert(.multiline_string_literal_line == token_tags[token]);
++    // Collect (exclusive) token range of the literal (one token per literal line)
++    const start = if (std.mem.lastIndexOfNone(Token.Tag, token_tags[0..(token + 1)], &.{.multiline_string_literal_line})) |i| i + 1 else 0;
++    const end = std.mem.indexOfNonePos(Token.Tag, token_tags, token, &.{.multiline_string_literal_line}) orelse token_tags.len;
++
++    // collect the text in the literal
++    const loc = offsets.tokensToLoc(builder.handle.tree, @intCast(start), @intCast(end));
++    var str_escaped: std.ArrayListUnmanaged(u8) = try .initCapacity(builder.arena, 2 * (loc.end - loc.start));
++    str_escaped.appendAssumeCapacity('"');
++    for (start..end) |i| {
++        std.debug.assert(token_tags[i] == .multiline_string_literal_line);
++        const string_part = offsets.tokenToSlice(builder.handle.tree, @intCast(i));
++        // Iterate without the leading \\
++        for (string_part[2..]) |c| {
++            const chunk = switch (c) {
++                '\\' => "\\\\",
++                '"' => "\\\"",
++                '\n' => "\\n",
++                0x01...0x09, 0x0b...0x0c, 0x0e...0x1f, 0x7f => unreachable,
++                else => &.{c},
++            };
++            str_escaped.appendSliceAssumeCapacity(chunk);
++        }
++        if (i != end - 1) {
++            str_escaped.appendSliceAssumeCapacity("\\n");
++        }
++    }
++    str_escaped.appendAssumeCapacity('"');
++
++    // Get Loc of the whole literal to delete it
++    // Multiline string literal ends before the \n or \r, but it must be deleted too
++    const first_token_start = builder.handle.tree.tokens.items(.start)[start];
++    const last_token_end = std.mem.indexOfNonePos(
++        u8,
++        builder.handle.tree.source,
++        offsets.tokenToLoc(builder.handle.tree, @intCast(end - 1)).end + 1,
++        "\n\r",
++    ) orelse builder.handle.tree.source.len;
++    const remove_loc: offsets.Loc = .{ .start = first_token_start, .end = last_token_end };
++
++    try builder.actions.append(builder.arena, .{
++        .title = "convert to a string literal",
++        .kind = .refactor,
++        .isPreferred = false,
++        .edit = try builder.createWorkspaceEdit(&.{builder.createTextEditLoc(remove_loc, str_escaped.items)}),
++    });
++}
++
++/// To report server capabilities
++pub const supported_code_actions: []const types.CodeActionKind = &.{
++    .quickfix,
++    .refactor,
++    .source,
++    .@"source.organizeImports",
++    .@"source.fixAll",
++};
++
+ pub fn collectAutoDiscardDiagnostics(
+     tree: Ast,
+     arena: std.mem.Allocator,
+     diagnostics: *std.ArrayListUnmanaged(types.Diagnostic),
+     offset_encoding: offsets.Encoding,
+ ) error{OutOfMemory}!void {
++    const tracy_zone = tracy.trace(@src());
++    defer tracy_zone.end();
++
+     const token_tags = tree.tokens.items(.tag);
+     const token_starts = tree.tokens.items(.start);
+ 
+@@ -83,7 +262,7 @@ pub fn collectAutoDiscardDiagnostics(
+     var i: usize = 0;
+     while (i < tree.tokens.len) {
+         const first_token: Ast.TokenIndex = @intCast(std.mem.indexOfPos(
+-            std.zig.Token.Tag,
++            Token.Tag,
+             token_tags,
+             i,
+             &.{ .identifier, .equal, .identifier, .semicolon },
+@@ -112,27 +291,32 @@ pub fn collectAutoDiscardDiagnostics(
+     }
+ }
+ 
+-fn handleNonCamelcaseFunction(builder: *Builder, actions: *std.ArrayListUnmanaged(types.CodeAction), loc: offsets.Loc) !void {
++fn handleNonCamelcaseFunction(builder: *Builder, loc: offsets.Loc) !void {
++    const tracy_zone = tracy.trace(@src());
++    defer tracy_zone.end();
++
++    if (!builder.wantKind(.quickfix)) return;
++
+     const identifier_name = offsets.locToSlice(builder.handle.tree.source, loc);
+ 
+     if (std.mem.allEqual(u8, identifier_name, '_')) return;
+ 
+     const new_text = try createCamelcaseText(builder.arena, identifier_name);
+ 
+-    const action1 = types.CodeAction{
++    try builder.actions.append(builder.arena, .{
+         .title = "make function name camelCase",
+         .kind = .quickfix,
+         .isPreferred = true,
+         .edit = try builder.createWorkspaceEdit(&.{builder.createTextEditLoc(loc, new_text)}),
+-    };
+-
+-    try actions.append(builder.arena, action1);
++    });
+ }
+ 
+-fn handleUnusedFunctionParameter(builder: *Builder, actions: *std.ArrayListUnmanaged(types.CodeAction), loc: offsets.Loc) !void {
++fn handleUnusedFunctionParameter(builder: *Builder, loc: offsets.Loc) !void {
+     const tracy_zone = tracy.trace(@src());
+     defer tracy_zone.end();
+ 
++    if (!builder.wantKind(.@"source.fixAll") and !builder.wantKind(.quickfix)) return;
++
+     const identifier_name = offsets.locToSlice(builder.handle.tree.source, loc);
+ 
+     const tree = builder.handle.tree;
+@@ -181,28 +365,28 @@ fn handleUnusedFunctionParameter(builder: *Builder, actions: *std.ArrayListUnman
+     const add_suffix_newline = is_last_param and token_tags[insert_token + 1] == .r_brace and tree.tokensOnSameLine(insert_token, insert_token + 1);
+     const insert_index, const new_text = try createDiscardText(builder, identifier_name, insert_token, true, add_suffix_newline);
+ 
+-    const action1 = types.CodeAction{
+-        .title = "discard function parameter",
+-        .kind = .@"source.fixAll",
+-        .isPreferred = true,
+-        .edit = try builder.createWorkspaceEdit(&.{builder.createTextEditPos(insert_index, new_text)}),
+-    };
+-
+-    // TODO fix formatting
+-    const action2 = types.CodeAction{
+-        .title = "remove function parameter",
+-        .kind = .quickfix,
+-        .isPreferred = false,
+-        .edit = try builder.createWorkspaceEdit(&.{builder.createTextEditLoc(getParamRemovalRange(tree, fn_proto_param), "")}),
+-    };
++    if (builder.wantKind(.@"source.fixAll")) {
++        try builder.fixall_text_edits.insert(builder.arena, 0, builder.createTextEditPos(insert_index, new_text));
++    }
+ 
+-    try actions.insertSlice(builder.arena, 0, &.{ action1, action2 });
++    if (builder.wantKind(.quickfix)) {
++        // TODO add no `// autofix` comment
++        // TODO fix formatting
++        try builder.actions.append(builder.arena, .{
++            .title = "remove function parameter",
++            .kind = .quickfix,
++            .isPreferred = false,
++            .edit = try builder.createWorkspaceEdit(&.{builder.createTextEditLoc(getParamRemovalRange(tree, fn_proto_param), "")}),
++        });
++    }
+ }
+ 
+-fn handleUnusedVariableOrConstant(builder: *Builder, actions: *std.ArrayListUnmanaged(types.CodeAction), loc: offsets.Loc) !void {
++fn handleUnusedVariableOrConstant(builder: *Builder, loc: offsets.Loc) !void {
+     const tracy_zone = tracy.trace(@src());
+     defer tracy_zone.end();
+ 
++    if (!builder.wantKind(.@"source.fixAll") and !builder.wantKind(.quickfix)) return;
++
+     const identifier_name = offsets.locToSlice(builder.handle.tree.source, loc);
+ 
+     const tree = builder.handle.tree;
+@@ -227,35 +411,73 @@ fn handleUnusedVariableOrConstant(builder: *Builder, actions: *std.ArrayListUnma
+ 
+     const insert_index, const new_text = try createDiscardText(builder, identifier_name, insert_token, false, false);
+ 
+-    try actions.append(builder.arena, .{
+-        .title = "discard value",
+-        .kind = .@"source.fixAll",
+-        .isPreferred = true,
+-        .edit = try builder.createWorkspaceEdit(&.{builder.createTextEditPos(insert_index, new_text)}),
+-    });
++    if (builder.wantKind(.@"source.fixAll")) {
++        try builder.fixall_text_edits.append(builder.arena, builder.createTextEditPos(insert_index, new_text));
++    }
++
++    if (builder.wantKind(.quickfix)) {
++        // TODO add no `// autofix` comment
++        try builder.actions.append(builder.arena, .{
++            .title = "discard value",
++            .kind = .quickfix,
++            .isPreferred = true,
++            .edit = try builder.createWorkspaceEdit(&.{builder.createTextEditPos(insert_index, new_text)}),
++        });
++    }
+ }
+ 
+ fn handleUnusedCapture(
+     builder: *Builder,
+-    actions: *std.ArrayListUnmanaged(types.CodeAction),
+     loc: offsets.Loc,
+     remove_capture_actions: *std.AutoHashMapUnmanaged(types.Range, void),
+ ) !void {
+     const tracy_zone = tracy.trace(@src());
+     defer tracy_zone.end();
+ 
++    if (!builder.wantKind(.@"source.fixAll") and !builder.wantKind(.quickfix)) return;
++
+     const tree = builder.handle.tree;
+     const token_tags = tree.tokens.items(.tag);
+ 
+     const source = tree.source;
+-    const capture_loc = getCaptureLoc(source, loc) orelse return;
+ 
+     const identifier_token = offsets.sourceIndexToTokenIndex(tree, loc.start);
+     if (token_tags[identifier_token] != .identifier) return;
+ 
+     const identifier_name = offsets.locToSlice(source, loc);
+ 
+-    const capture_end: Ast.TokenIndex = @intCast(std.mem.indexOfScalarPos(std.zig.Token.Tag, token_tags, identifier_token, .pipe) orelse return);
++    // Zig can report incorrect "unused capture" errors
++    // https://github.com/ziglang/zig/pull/22209
++    if (std.mem.eql(u8, identifier_name, "_")) return;
++
++    if (builder.wantKind(.quickfix)) {
++        const capture_loc = getCaptureLoc(source, loc) orelse return;
++
++        const remove_cap_loc = builder.createTextEditLoc(capture_loc, "");
++
++        try builder.actions.append(builder.arena, .{
++            .title = "discard capture name",
++            .kind = .quickfix,
++            .isPreferred = false,
++            .edit = try builder.createWorkspaceEdit(&.{builder.createTextEditLoc(loc, "_")}),
++        });
++
++        // prevent adding duplicate 'remove capture' action.
++        // search for a matching action by comparing ranges.
++        const gop = try remove_capture_actions.getOrPut(builder.arena, remove_cap_loc.range);
++        if (!gop.found_existing) {
++            try builder.actions.append(builder.arena, .{
++                .title = "remove capture",
++                .kind = .quickfix,
++                .isPreferred = false,
++                .edit = try builder.createWorkspaceEdit(&.{remove_cap_loc}),
++            });
++        }
++    }
++
++    if (!builder.wantKind(.@"source.fixAll")) return;
++
++    const capture_end: Ast.TokenIndex = @intCast(std.mem.indexOfScalarPos(Token.Tag, token_tags, identifier_token, .pipe) orelse return);
+ 
+     var lbrace_token = capture_end + 1;
+ 
+@@ -296,55 +518,41 @@ fn handleUnusedCapture(
+     // if we are on the last capture of the block, we need to add an additional newline
+     // i.e |a, b| { ... } -> |a, b| { ... \n_ = a; \n_ = b;\n }
+     const add_suffix_newline = is_last_capture and token_tags[insert_token + 1] == .r_brace and tree.tokensOnSameLine(insert_token, insert_token + 1);
+-
+     const insert_index, const new_text = try createDiscardText(builder, identifier_name, insert_token, true, add_suffix_newline);
+-    const action1 = .{
+-        .title = "discard capture",
+-        .kind = .@"source.fixAll",
+-        .isPreferred = true,
+-        .edit = try builder.createWorkspaceEdit(&.{builder.createTextEditPos(insert_index, new_text)}),
+-    };
+-    const action2 = .{
+-        .title = "discard capture name",
+-        .kind = .quickfix,
+-        .isPreferred = false,
+-        .edit = try builder.createWorkspaceEdit(&.{builder.createTextEditLoc(loc, "_")}),
+-    };
+ 
+-    // prevent adding duplicate 'remove capture' action.
+-    // search for a matching action by comparing ranges.
+-    const remove_cap_loc = builder.createTextEditLoc(capture_loc, "");
+-    const gop = try remove_capture_actions.getOrPut(builder.arena, remove_cap_loc.range);
+-    if (gop.found_existing)
+-        try actions.insertSlice(builder.arena, 0, &.{ action1, action2 })
+-    else {
+-        const action0 = types.CodeAction{
+-            .title = "remove capture",
+-            .kind = .quickfix,
+-            .isPreferred = false,
+-            .edit = try builder.createWorkspaceEdit(&.{remove_cap_loc}),
+-        };
+-        try actions.insertSlice(builder.arena, 0, &.{ action0, action1, action2 });
+-    }
++    try builder.fixall_text_edits.insert(builder.arena, 0, builder.createTextEditPos(insert_index, new_text));
+ }
+ 
+-fn handlePointlessDiscard(builder: *Builder, actions: *std.ArrayListUnmanaged(types.CodeAction), loc: offsets.Loc) !void {
++fn handlePointlessDiscard(builder: *Builder, loc: offsets.Loc) !void {
+     const tracy_zone = tracy.trace(@src());
+     defer tracy_zone.end();
+ 
++    if (!builder.wantKind(.@"source.fixAll") and !builder.wantKind(.quickfix)) return;
++
+     const edit_loc = getDiscardLoc(builder.handle.tree.source, loc) orelse return;
+ 
+-    try actions.append(builder.arena, .{
+-        .title = "remove pointless discard",
+-        .kind = .@"source.fixAll",
+-        .isPreferred = true,
+-        .edit = try builder.createWorkspaceEdit(&.{
+-            builder.createTextEditLoc(edit_loc, ""),
+-        }),
+-    });
++    if (builder.wantKind(.@"source.fixAll")) {
++        try builder.fixall_text_edits.append(builder.arena, builder.createTextEditLoc(edit_loc, ""));
++    }
++
++    if (builder.wantKind(.quickfix)) {
++        try builder.actions.append(builder.arena, .{
++            .title = "remove pointless discard",
++            .kind = .@"source.fixAll",
++            .isPreferred = true,
++            .edit = try builder.createWorkspaceEdit(&.{
++                builder.createTextEditLoc(edit_loc, ""),
++            }),
++        });
++    }
+ }
+ 
+-fn handleVariableNeverMutated(builder: *Builder, actions: *std.ArrayListUnmanaged(types.CodeAction), loc: offsets.Loc) !void {
++fn handleVariableNeverMutated(builder: *Builder, loc: offsets.Loc) !void {
++    const tracy_zone = tracy.trace(@src());
++    defer tracy_zone.end();
++
++    if (!builder.wantKind(.quickfix)) return;
++
+     const source = builder.handle.tree.source;
+ 
+     const var_keyword_end = 1 + (std.mem.lastIndexOfNone(u8, source[0..loc.start], &std.ascii.whitespace) orelse return);
+@@ -356,7 +564,7 @@ fn handleVariableNeverMutated(builder: *Builder, actions: *std.ArrayListUnmanage
+ 
+     if (!std.mem.eql(u8, offsets.locToSlice(source, var_keyword_loc), "var")) return;
+ 
+-    try actions.append(builder.arena, .{
++    try builder.actions.append(builder.arena, .{
+         .title = "use 'const'",
+         .kind = .quickfix,
+         .isPreferred = true,
+@@ -366,6 +574,325 @@ fn handleVariableNeverMutated(builder: *Builder, actions: *std.ArrayListUnmanage
+     });
+ }
+ 
++fn handleUnorganizedImport(builder: *Builder) !void {
++    const tracy_zone = tracy.trace(@src());
++    defer tracy_zone.end();
++
++    if (!builder.wantKind(.@"source.organizeImports")) return;
++
++    const tree = builder.handle.tree;
++    if (tree.errors.len != 0) return;
++
++    const imports = try getImportsDecls(builder, builder.arena);
++
++    // The optimization is disabled because it does not detect the case where imports and other decls are mixed
++    // if (std.sort.isSorted(ImportDecl, imports.items, tree, ImportDecl.lessThan)) return;
++
++    const sorted_imports = try builder.arena.dupe(ImportDecl, imports);
++    std.mem.sort(ImportDecl, sorted_imports, tree, ImportDecl.lessThan);
++
++    var edits: std.ArrayListUnmanaged(types.TextEdit) = .empty;
++
++    // add sorted imports
++    {
++        var new_text: std.ArrayListUnmanaged(u8) = .empty;
++        var writer = new_text.writer(builder.arena);
++
++        for (sorted_imports, 0..) |import_decl, i| {
++            if (i != 0 and ImportDecl.addSeperator(sorted_imports[i - 1], import_decl)) {
++                try new_text.append(builder.arena, '\n');
++            }
++
++            try writer.print("{s}\n", .{offsets.locToSlice(tree.source, import_decl.getLoc(tree, false))});
++        }
++        try writer.writeByte('\n');
++
++        const tokens = tree.tokens.items(.tag);
++        const first_token = std.mem.indexOfNone(Token.Tag, tokens, &.{.container_doc_comment}) orelse tokens.len;
++        const insert_pos = offsets.tokenToPosition(tree, @intCast(first_token), builder.offset_encoding);
++
++        try edits.append(builder.arena, .{
++            .range = .{ .start = insert_pos, .end = insert_pos },
++            .newText = new_text.items,
++        });
++    }
++
++    {
++        // remove previous imports
++        const import_locs = try builder.arena.alloc(offsets.Loc, imports.len);
++        for (imports, import_locs) |import_decl, *loc| {
++            loc.* = import_decl.getLoc(tree, true);
++        }
++
++        const import_ranges = try builder.arena.alloc(types.Range, imports.len);
++        try offsets.multiple.locToRange(builder.arena, tree.source, import_locs, import_ranges, builder.offset_encoding);
++
++        for (import_ranges) |range| {
++            try edits.append(builder.arena, .{
++                .range = range,
++                .newText = "",
++            });
++        }
++    }
++
++    const workspace_edit = try builder.createWorkspaceEdit(edits.items);
++
++    try builder.actions.append(builder.arena, .{
++        .title = "organize @import",
++        .kind = .@"source.organizeImports",
++        .isPreferred = true,
++        .edit = workspace_edit,
++    });
++}
++
++/// const name_slice = @import(value_slice);
++pub const ImportDecl = struct {
++    var_decl: Ast.Node.Index,
++    first_comment_token: ?Ast.TokenIndex,
++    name: []const u8,
++    value: []const u8,
++
++    /// Strings for sorting second order imports (e.g. `const ascii = std.ascii`)
++    parent_name: ?[]const u8 = null,
++    parent_value: ?[]const u8 = null,
++
++    pub const AstNodeAdapter = struct {
++        pub fn hash(ctx: @This(), ast_node: Ast.Node.Index) u32 {
++            _ = ctx;
++            const hash_fn = std.array_hash_map.getAutoHashFn(Ast.Node.Index, void);
++            return hash_fn({}, ast_node);
++        }
++
++        pub fn eql(ctx: @This(), a: Ast.Node.Index, b: ImportDecl, b_index: usize) bool {
++            _ = ctx;
++            _ = b_index;
++            return a == b.var_decl;
++        }
++    };
++
++    /// declaration order controls sorting order
++    pub const Kind = enum {
++        std,
++        builtin,
++        build_options,
++        package,
++        file,
++    };
++
++    pub const sort_case_sensitive: bool = false;
++    pub const sort_public_decls_first: bool = false;
++
++    pub fn lessThan(context: Ast, lhs: ImportDecl, rhs: ImportDecl) bool {
++        const lhs_kind = lhs.getKind();
++        const rhs_kind = rhs.getKind();
++        if (lhs_kind != rhs_kind) return @intFromEnum(lhs_kind) < @intFromEnum(rhs_kind);
++
++        if (sort_public_decls_first) {
++            const node_tokens = context.nodes.items(.main_token);
++            const token_tags = context.tokens.items(.tag);
++
++            const is_lhs_pub = node_tokens[lhs.var_decl] > 0 and token_tags[node_tokens[lhs.var_decl] - 1] == .keyword_pub;
++            const is_rhs_pub = node_tokens[rhs.var_decl] > 0 and token_tags[node_tokens[rhs.var_decl] - 1] == .keyword_pub;
++            if (is_lhs_pub != is_rhs_pub) return is_lhs_pub;
++        }
++
++        // First the parent @import, then the child using it
++        if (lhs.isParent(rhs)) return true;
++
++        // 'root' gets sorted after 'builtin'
++        if (sort_case_sensitive) {
++            return std.mem.lessThan(u8, lhs.getSortSlice(), rhs.getSortSlice());
++        } else {
++            return std.ascii.lessThanIgnoreCase(lhs.getSortSlice(), rhs.getSortSlice());
++        }
++    }
++
++    pub fn isParent(self: ImportDecl, child: ImportDecl) bool {
++        const parent_name = child.parent_name orelse return false;
++        const parent_value = child.parent_value orelse return false;
++        return std.mem.eql(u8, self.name, parent_name) and std.mem.eql(u8, self.value, parent_value);
++    }
++
++    pub fn getKind(self: ImportDecl) Kind {
++        const name = self.getSortValue()[1 .. self.getSortValue().len - 1];
++
++        if (std.mem.endsWith(u8, name, ".zig")) return .file;
++
++        if (std.mem.eql(u8, name, "std")) return .std;
++        if (std.mem.eql(u8, name, "builtin")) return .builtin;
++        if (std.mem.eql(u8, name, "root")) return .builtin;
++        if (std.mem.eql(u8, name, "build_options")) return .build_options;
++
++        return .package;
++    }
++
++    /// returns the string by which this import should be sorted
++    pub fn getSortSlice(self: ImportDecl) []const u8 {
++        switch (self.getKind()) {
++            .file => {
++                if (std.mem.indexOfScalar(u8, self.getSortValue(), '/') != null) {
++                    return self.getSortValue()[1 .. self.getSortValue().len - 1];
++                }
++                return self.getSortName();
++            },
++            // There used to be unreachable for other than file and package, but the user
++            // can just write @import("std") twice.
++            else => return self.getSortName(),
++        }
++    }
++
++    pub fn getSortName(self: ImportDecl) []const u8 {
++        return self.parent_name orelse self.name;
++    }
++
++    pub fn getSortValue(self: ImportDecl) []const u8 {
++        return self.parent_value orelse self.value;
++    }
++
++    /// returns true if there should be an empty line between these two imports
++    /// assumes `lessThan(void, lhs, rhs) == true`
++    pub fn addSeperator(lhs: ImportDecl, rhs: ImportDecl) bool {
++        const lhs_kind = @intFromEnum(lhs.getKind());
++        const rhs_kind = @intFromEnum(rhs.getKind());
++        if (rhs_kind <= @intFromEnum(Kind.build_options)) return false;
++        return lhs_kind != rhs_kind;
++    }
++
++    pub fn getSourceStartIndex(self: ImportDecl, tree: Ast) usize {
++        return offsets.tokenToIndex(tree, self.first_comment_token orelse tree.firstToken(self.var_decl));
++    }
++
++    pub fn getSourceEndIndex(self: ImportDecl, tree: Ast, include_line_break: bool) usize {
++        const token_tags = tree.tokens.items(.tag);
++
++        var last_token = ast.lastToken(tree, self.var_decl);
++        if (last_token + 1 < tree.tokens.len - 1 and token_tags[last_token + 1] == .semicolon) {
++            last_token += 1;
++        }
++
++        const end = offsets.tokenToLoc(tree, last_token).end;
++        if (!include_line_break) return end;
++        return std.mem.indexOfNonePos(u8, tree.source, end, &.{ ' ', '\t', '\n' }) orelse tree.source.len;
++    }
++
++    /// similar to `offsets.nodeToLoc` but will also include preceding comments and postfix semicolon and line break
++    pub fn getLoc(self: ImportDecl, tree: Ast, include_line_break: bool) offsets.Loc {
++        return .{
++            .start = self.getSourceStartIndex(tree),
++            .end = self.getSourceEndIndex(tree, include_line_break),
++        };
++    }
++};
++
++pub fn getImportsDecls(builder: *Builder, allocator: std.mem.Allocator) error{OutOfMemory}![]ImportDecl {
++    const tree = builder.handle.tree;
++
++    const node_tags = tree.nodes.items(.tag);
++    const node_data = tree.nodes.items(.data);
++    const node_tokens = tree.nodes.items(.main_token);
++
++    const root_decls = tree.rootDecls();
++
++    var skip_set: std.DynamicBitSetUnmanaged = try .initEmpty(allocator, root_decls.len);
++    defer skip_set.deinit(allocator);
++
++    var imports: std.ArrayHashMapUnmanaged(ImportDecl, void, void, true) = .empty;
++    defer imports.deinit(allocator);
++
++    // iterate until no more imports are found
++    var updated = true;
++    while (updated) {
++        updated = false;
++        var it = skip_set.iterator(.{ .kind = .unset });
++        next_decl: while (it.next()) |root_decl_index| {
++            const node = root_decls[root_decl_index];
++
++            var do_skip: bool = true;
++            defer if (do_skip) skip_set.set(root_decl_index);
++
++            if (skip_set.isSet(root_decl_index)) continue;
++
++            if (node_tags[node] != .simple_var_decl) continue;
++            const var_decl = tree.simpleVarDecl(node);
++
++            var current_node = var_decl.ast.init_node;
++            const import: ImportDecl = found_decl: while (true) {
++                const token = node_tokens[current_node];
++                switch (node_tags[current_node]) {
++                    .builtin_call_two, .builtin_call_two_comma => {
++                        // `>@import("string")<` case
++                        const builtin_name = offsets.tokenToSlice(tree, token);
++                        if (!std.mem.eql(u8, builtin_name, "@import")) continue :next_decl;
++                        // TODO what about @embedFile ?
++
++                        if (node_data[current_node].lhs == 0 or node_data[current_node].rhs != 0) continue :next_decl;
++                        const param_node = node_data[current_node].lhs;
++                        if (node_tags[param_node] != .string_literal) continue :next_decl;
++
++                        const name_token = var_decl.ast.mut_token + 1;
++                        const value_token = node_tokens[param_node];
++
++                        break :found_decl .{
++                            .var_decl = node,
++                            .first_comment_token = Analyser.getDocCommentTokenIndex(tree.tokens.items(.tag), node_tokens[node]),
++                            .name = offsets.tokenToSlice(tree, name_token),
++                            .value = offsets.tokenToSlice(tree, value_token),
++                        };
++                    },
++                    .field_access => {
++                        // `@import("foo").>bar<` or `foo.>bar<` case
++                        // drill down to the base import
++                        current_node = node_data[current_node].lhs;
++                        continue;
++                    },
++                    .identifier => {
++                        // `>std<.ascii` case - Might be an alias
++                        const name_token = ast.identifierTokenFromIdentifierNode(tree, current_node) orelse continue :next_decl;
++                        const name = offsets.identifierTokenToNameSlice(tree, name_token);
++
++                        // calling `lookupSymbolGlobal` is slower than just looking up a symbol at the root scope directly.
++                        // const decl = try builder.analyser.lookupSymbolGlobal(builder.handle, name, source_index) orelse continue :next_decl;
++                        const document_scope = try builder.handle.getDocumentScope();
++
++                        const decl_index = document_scope.getScopeDeclaration(.{
++                            .scope = .root,
++                            .name = name,
++                            .kind = .other,
++                        }).unwrap() orelse continue :next_decl;
++
++                        const decl = document_scope.declarations.get(@intFromEnum(decl_index));
++
++                        if (decl != .ast_node) continue :next_decl;
++                        const decl_found = decl.ast_node;
++
++                        const import_decl = imports.getKeyAdapted(decl_found, ImportDecl.AstNodeAdapter{}) orelse {
++                            // We may find the import in a future loop iteration
++                            do_skip = false;
++                            continue :next_decl;
++                        };
++                        const ident_name_token = var_decl.ast.mut_token + 1;
++                        const var_name = offsets.tokenToSlice(tree, ident_name_token);
++                        break :found_decl .{
++                            .var_decl = node,
++                            .first_comment_token = Analyser.getDocCommentTokenIndex(tree.tokens.items(.tag), node_tokens[node]),
++                            .name = var_name,
++                            .value = var_name,
++                            .parent_name = import_decl.getSortName(),
++                            .parent_value = import_decl.getSortValue(),
++                        };
++                    },
++                    else => continue :next_decl,
++                }
++            };
++            const gop = try imports.getOrPutContextAdapted(allocator, import.var_decl, ImportDecl.AstNodeAdapter{}, {});
++            if (!gop.found_existing) gop.key_ptr.* = import;
++            updated = true;
++        }
++    }
++
++    return try allocator.dupe(ImportDecl, imports.keys());
++}
++
+ fn detectIndentation(source: []const u8) []const u8 {
+     // Essentially I'm looking for the first indentation in the file.
+     var i: usize = 0;
+@@ -398,7 +925,7 @@ fn createCamelcaseText(allocator: std.mem.Allocator, identifier: []const u8) ![]
+     const num_separators = std.mem.count(u8, trimmed_identifier, "_");
+ 
+     const new_text_len = trimmed_identifier.len - num_separators;
+-    var new_text = try std.ArrayListUnmanaged(u8).initCapacity(allocator, new_text_len);
++    var new_text: std.ArrayListUnmanaged(u8) = try .initCapacity(allocator, new_text_len);
+     errdefer new_text.deinit(allocator);
+ 
+     var idx: usize = 0;
+@@ -462,7 +989,7 @@ fn createDiscardText(
+         identifier_name.len +
+         "; // autofix".len +
+         if (add_suffix_newline) 1 + indent.len else 0;
+-    var new_text = try std.ArrayListUnmanaged(u8).initCapacity(builder.arena, new_text_len);
++    var new_text: std.ArrayListUnmanaged(u8) = try .initCapacity(builder.arena, new_text_len);
+ 
+     new_text.appendAssumeCapacity('\n');
+     new_text.appendSliceAssumeCapacity(indent);
+@@ -542,15 +1069,15 @@ const DiagnosticKind = union(enum) {
+         const msg = diagnostic_message;
+ 
+         if (std.mem.startsWith(u8, msg, "unused ")) {
+-            return DiagnosticKind{
++            return .{
+                 .unused = parseEnum(IdCat, msg["unused ".len..]) orelse return null,
+             };
+         } else if (std.mem.startsWith(u8, msg, "pointless discard of ")) {
+-            return DiagnosticKind{
++            return .{
+                 .pointless_discard = parseEnum(IdCat, msg["pointless discard of ".len..]) orelse return null,
+             };
+         } else if (std.mem.startsWith(u8, msg, "discard of ")) {
+-            return DiagnosticKind{
++            return .{
+                 .omit_discard = parseEnum(DiscardCat, msg["discard of ".len..]) orelse return null,
+             };
+         } else if (std.mem.startsWith(u8, msg, "Functions should be camelCase")) {
+@@ -634,7 +1161,7 @@ fn getDiscardLoc(text: []const u8, loc: offsets.Loc) ?offsets.Loc {
+         }
+     };
+ 
+-    return offsets.Loc{
++    return .{
+         .start = start_position,
+         .end = autofix_comment_end,
+     };
+diff --git a/src/features/diagnostics.zig b/src/features/diagnostics.zig
+index 3028efb4..64cd7197 100644
+--- a/src/features/diagnostics.zig
++++ b/src/features/diagnostics.zig
+@@ -1,603 +1,662 @@
+ //! Implementation of [`textDocument/publishDiagnostics`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_publishDiagnostics)
+ 
+ const std = @import("std");
++const builtin = @import("builtin");
+ const Ast = std.zig.Ast;
+-const log = std.log.scoped(.zls_diag);
++const log = std.log.scoped(.diag);
+ 
+ const Server = @import("../Server.zig");
+ const DocumentStore = @import("../DocumentStore.zig");
+-const types = @import("lsp").types;
++const lsp = @import("lsp");
++const types = lsp.types;
+ const Analyser = @import("../analysis.zig");
+ const ast = @import("../ast.zig");
+ const offsets = @import("../offsets.zig");
+ const URI = @import("../uri.zig");
+ const code_actions = @import("code_actions.zig");
+ const tracy = @import("tracy");
++const DiagnosticsCollection = @import("../DiagnosticsCollection.zig");
+ 
+ const Zir = std.zig.Zir;
+ 
+-pub fn generateDiagnostics(server: *Server, arena: std.mem.Allocator, handle: *DocumentStore.Handle) error{OutOfMemory}!types.PublishDiagnosticsParams {
++pub fn generateDiagnostics(
++    server: *Server,
++    handle: *DocumentStore.Handle,
++) error{OutOfMemory}!void {
+     const tracy_zone = tracy.trace(@src());
+     defer tracy_zone.end();
+ 
+-    std.debug.assert(server.client_capabilities.supports_publish_diagnostics);
+-
+-    const tree = handle.tree;
++    if (handle.tree.errors.len == 0) {
++        const tracy_zone2 = tracy.traceNamed(@src(), "ast-check");
++        defer tracy_zone2.end();
+ 
+-    var diagnostics = std.ArrayListUnmanaged(types.Diagnostic){};
++        var error_bundle = try getAstCheckDiagnostics(server, handle);
++        errdefer error_bundle.deinit(server.allocator);
+ 
+-    try diagnostics.ensureUnusedCapacity(arena, tree.errors.len);
+-    for (tree.errors) |err| {
+-        var buffer = std.ArrayListUnmanaged(u8){};
+-        try tree.renderError(err, buffer.writer(arena));
++        try server.diagnostics_collection.pushSingleDocumentDiagnostics(
++            .parse,
++            handle.uri,
++            .{ .error_bundle = error_bundle },
++        );
++    } else {
++        var wip: std.zig.ErrorBundle.Wip = undefined;
++        try wip.init(server.allocator);
++        defer wip.deinit();
+ 
+-        diagnostics.appendAssumeCapacity(.{
+-            .range = offsets.tokenToRange(tree, err.token, server.offset_encoding),
+-            .severity = .Error,
+-            .code = .{ .string = @tagName(err.tag) },
+-            .source = "zls",
+-            .message = try buffer.toOwnedSlice(arena),
+-        });
+-    }
++        try collectParseDiagnostics(handle.tree, &wip);
+ 
+-    if (tree.errors.len == 0) {
+-        try getAstCheckDiagnostics(server, arena, handle, &diagnostics);
+-    }
++        var error_bundle = try wip.toOwnedBundle("");
++        errdefer error_bundle.deinit(server.allocator);
+ 
+-    if (server.config.enable_autofix) {
+-        try code_actions.collectAutoDiscardDiagnostics(tree, arena, &diagnostics, server.offset_encoding);
++        try server.diagnostics_collection.pushSingleDocumentDiagnostics(
++            .parse,
++            handle.uri,
++            .{ .error_bundle = error_bundle },
++        );
+     }
+ 
+-    if (server.config.warn_style) {
+-        var node: u32 = 0;
+-        while (node < tree.nodes.len) : (node += 1) {
+-            if (ast.isBuiltinCall(tree, node)) {
+-                const builtin_token = tree.nodes.items(.main_token)[node];
+-                const call_name = tree.tokenSlice(builtin_token);
+-
+-                if (!std.mem.eql(u8, call_name, "@import")) continue;
+-
+-                var buffer: [2]Ast.Node.Index = undefined;
+-                const params = ast.builtinCallParams(tree, node, &buffer).?;
+-
+-                if (params.len != 1) continue;
++    {
++        var arena_allocator: std.heap.ArenaAllocator = .init(server.diagnostics_collection.allocator);
++        errdefer arena_allocator.deinit();
++        const arena = arena_allocator.allocator();
+ 
+-                const import_str_token = tree.nodes.items(.main_token)[params[0]];
+-                const import_str = tree.tokenSlice(import_str_token);
++        var diagnostics: std.ArrayListUnmanaged(types.Diagnostic) = .empty;
+ 
+-                if (std.mem.startsWith(u8, import_str, "\"./")) {
+-                    try diagnostics.append(arena, .{
+-                        .range = offsets.tokenToRange(tree, import_str_token, server.offset_encoding),
+-                        .severity = .Hint,
+-                        .code = .{ .string = "dot_slash_import" },
+-                        .source = "zls",
+-                        .message = "A ./ is not needed in imports",
+-                    });
+-                }
+-            }
++        if (server.getAutofixMode() != .none and handle.tree.mode == .zig) {
++            try code_actions.collectAutoDiscardDiagnostics(handle.tree, arena, &diagnostics, server.offset_encoding);
+         }
+ 
+-        // TODO: style warnings for types, values and declarations below root scope
+-        if (tree.errors.len == 0) {
+-            for (tree.rootDecls()) |decl_idx| {
+-                const decl = tree.nodes.items(.tag)[decl_idx];
+-                switch (decl) {
+-                    .fn_proto,
+-                    .fn_proto_multi,
+-                    .fn_proto_one,
+-                    .fn_proto_simple,
+-                    .fn_decl,
+-                    => blk: {
+-                        var buf: [1]Ast.Node.Index = undefined;
+-                        const func = tree.fullFnProto(&buf, decl_idx).?;
+-                        if (func.extern_export_inline_token != null) break :blk;
+-
+-                        if (func.name_token) |name_token| {
+-                            const is_type_function = Analyser.isTypeFunction(tree, func);
+-
+-                            const func_name = tree.tokenSlice(name_token);
+-                            if (!is_type_function and !Analyser.isCamelCase(func_name)) {
+-                                try diagnostics.append(arena, .{
+-                                    .range = offsets.tokenToRange(tree, name_token, server.offset_encoding),
+-                                    .severity = .Hint,
+-                                    .code = .{ .string = "bad_style" },
+-                                    .source = "zls",
+-                                    .message = "Functions should be camelCase",
+-                                });
+-                            } else if (is_type_function and !Analyser.isPascalCase(func_name)) {
+-                                try diagnostics.append(arena, .{
+-                                    .range = offsets.tokenToRange(tree, name_token, server.offset_encoding),
+-                                    .severity = .Hint,
+-                                    .code = .{ .string = "bad_style" },
+-                                    .source = "zls",
+-                                    .message = "Type functions should be PascalCase",
+-                                });
+-                            }
+-                        }
+-                    },
+-                    else => {},
+-                }
+-            }
++        if (server.config.warn_style and handle.tree.mode == .zig) {
++            try collectWarnStyleDiagnostics(handle.tree, arena, &diagnostics, server.offset_encoding);
+         }
+-    }
+ 
+-    for (handle.cimports.items(.hash), handle.cimports.items(.node)) |hash, node| {
+-        const result = blk: {
+-            server.document_store.lock.lock();
+-            defer server.document_store.lock.unlock();
+-            break :blk server.document_store.cimports.get(hash) orelse continue;
+-        };
+-        const error_bundle: std.zig.ErrorBundle = switch (result) {
+-            .success => continue,
+-            .failure => |bundle| bundle,
+-        };
+-
+-        try diagnostics.ensureUnusedCapacity(arena, error_bundle.errorMessageCount());
+-        for (error_bundle.getMessages()) |err_msg_index| {
+-            const err_msg = error_bundle.getErrorMessage(err_msg_index);
+-
+-            diagnostics.appendAssumeCapacity(.{
+-                .range = offsets.nodeToRange(tree, node, server.offset_encoding),
+-                .severity = .Error,
+-                .code = .{ .string = "cImport" },
+-                .source = "zls",
+-                .message = try arena.dupe(u8, error_bundle.nullTerminatedString(err_msg.msg)),
+-            });
++        if (server.config.highlight_global_var_declarations and handle.tree.mode == .zig) {
++            try collectGlobalVarDiagnostics(handle.tree, arena, &diagnostics, server.offset_encoding);
+         }
+-    }
+ 
+-    if (server.config.highlight_global_var_declarations) {
+-        const main_tokens = tree.nodes.items(.main_token);
+-        const tags = tree.tokens.items(.tag);
+-        for (tree.rootDecls()) |decl| {
+-            const decl_tag = tree.nodes.items(.tag)[decl];
+-            const decl_main_token = tree.nodes.items(.main_token)[decl];
+-
+-            switch (decl_tag) {
+-                .simple_var_decl,
+-                .aligned_var_decl,
+-                .local_var_decl,
+-                .global_var_decl,
+-                => {
+-                    if (tags[main_tokens[decl]] != .keyword_var) continue; // skip anything immutable
+-                    // uncomment this to get a list :)
+-                    //log.debug("possible global variable \"{s}\"", .{tree.tokenSlice(decl_main_token + 1)});
+-                    try diagnostics.append(arena, .{
+-                        .range = offsets.tokenToRange(tree, decl_main_token, server.offset_encoding),
+-                        .severity = .Hint,
+-                        .code = .{ .string = "highlight_global_var_declarations" },
+-                        .source = "zls",
+-                        .message = "Global var declaration",
+-                    });
+-                },
+-                else => {},
+-            }
+-        }
++        try server.diagnostics_collection.pushSingleDocumentDiagnostics(
++            .parse,
++            handle.uri,
++            .{ .lsp = .{ .arena = arena_allocator.state, .diagnostics = diagnostics.items } },
++        );
+     }
+ 
+-    return .{
+-        .uri = handle.uri,
+-        .diagnostics = diagnostics.items,
++    std.debug.assert(server.client_capabilities.supports_publish_diagnostics);
++    server.diagnostics_collection.publishDiagnostics() catch |err| {
++        log.err("failed to publish diagnostics: {}", .{err});
+     };
+ }
+ 
+-pub fn generateBuildOnSaveDiagnostics(
+-    server: *Server,
+-    workspace_uri: types.URI,
+-    arena: std.mem.Allocator,
+-    diagnostics: *std.StringArrayHashMapUnmanaged(std.ArrayListUnmanaged(types.Diagnostic)),
+-) !void {
++fn collectParseDiagnostics(tree: Ast, eb: *std.zig.ErrorBundle.Wip) error{OutOfMemory}!void {
+     const tracy_zone = tracy.trace(@src());
+     defer tracy_zone.end();
+-    comptime std.debug.assert(std.process.can_spawn);
+-
+-    const zig_exe_path = server.config.zig_exe_path orelse return;
+-    const zig_lib_path = server.config.zig_lib_path orelse return;
+-
+-    const workspace_path = URI.parse(server.allocator, workspace_uri) catch |err| {
+-        log.err("failed to parse invalid uri '{s}': {}", .{ workspace_uri, err });
+-        return;
+-    };
+-    defer server.allocator.free(workspace_path);
+-
+-    std.debug.assert(std.fs.path.isAbsolute(workspace_path));
+-
+-    const build_zig_path = try std.fs.path.join(server.allocator, &.{ workspace_path, "build.zig" });
+-    defer server.allocator.free(build_zig_path);
+-
+-    std.fs.accessAbsolute(build_zig_path, .{}) catch |err| switch (err) {
+-        error.FileNotFound => return,
+-        else => |e| {
+-            log.err("failed to load build.zig at '{s}': {}", .{ build_zig_path, e });
+-            return e;
+-        },
+-    };
+-
+-    const build_zig_uri = try URI.fromPath(server.allocator, build_zig_path);
+-    defer server.allocator.free(build_zig_uri);
+-
+-    const base_args = &[_][]const u8{
+-        zig_exe_path,
+-        "build",
+-        "--zig-lib-dir",
+-        zig_lib_path,
+-        "-fno-reference-trace",
+-        "--summary",
+-        "none",
+-    };
+-
+-    var argv = try std.ArrayListUnmanaged([]const u8).initCapacity(arena, base_args.len + server.config.build_on_save_args.len);
+-    defer argv.deinit(arena);
+-    argv.appendSliceAssumeCapacity(base_args);
+-    argv.appendSliceAssumeCapacity(server.config.build_on_save_args);
+-
+-    const has_explicit_steps = for (server.config.build_on_save_args) |extra_arg| {
+-        if (!std.mem.startsWith(u8, extra_arg, "-")) break true;
+-    } else false;
+-
+-    var has_check_step: bool = false;
+-
+-    blk: {
+-        server.document_store.lock.lockShared();
+-        defer server.document_store.lock.unlockShared();
+-        const build_file = server.document_store.build_files.get(build_zig_uri) orelse break :blk;
+-
+-        no_build_config: {
+-            const build_associated_config = build_file.build_associated_config orelse break :no_build_config;
+-            const build_options = build_associated_config.value.build_options orelse break :no_build_config;
+-
+-            try argv.ensureUnusedCapacity(arena, build_options.len);
+-            for (build_options) |build_option| {
+-                argv.appendAssumeCapacity(try build_option.formatParam(arena));
+-            }
+-        }
+-
+-        no_check: {
+-            if (has_explicit_steps) break :no_check;
+-            const config = build_file.tryLockConfig() orelse break :no_check;
+-            defer build_file.unlockConfig();
+-            for (config.top_level_steps) |tls| {
+-                if (std.mem.eql(u8, tls, "check")) {
+-                    has_check_step = true;
+-                    break;
+-                }
+-            }
+-        }
+-    }
+ 
+-    if (!(server.config.enable_build_on_save orelse has_check_step)) {
+-        return;
+-    }
++    if (tree.errors.len == 0) return;
+ 
+-    if (has_check_step) {
+-        std.debug.assert(!has_explicit_steps);
+-        try argv.append(arena, "check");
+-    }
++    const allocator = eb.gpa;
+ 
+-    const extra_args_joined = try std.mem.join(server.allocator, " ", argv.items[base_args.len..]);
+-    defer server.allocator.free(extra_args_joined);
++    var msg_buffer: std.ArrayListUnmanaged(u8) = .empty;
++    defer msg_buffer.deinit(allocator);
+ 
+-    log.info("Running build-on-save: {s} ({s})", .{ build_zig_uri, extra_args_joined });
++    var notes: std.ArrayListUnmanaged(std.zig.ErrorBundle.MessageIndex) = .empty;
++    defer notes.deinit(allocator);
+ 
+-    const result = std.process.Child.run(.{
+-        .allocator = server.allocator,
+-        .argv = argv.items,
+-        .cwd = workspace_path,
+-        .max_output_bytes = 1024 * 1024,
+-    }) catch |err| {
+-        const joined = std.mem.join(server.allocator, " ", argv.items) catch return;
+-        defer server.allocator.free(joined);
+-        log.err("failed zig build command:\n{s}\nerror:{}\n", .{ joined, err });
+-        return err;
+-    };
+-    defer server.allocator.free(result.stdout);
+-    defer server.allocator.free(result.stderr);
++    const current_error = tree.errors[0];
++    for (tree.errors[1..]) |err| {
++        if (!err.is_note) break;
+ 
+-    switch (result.term) {
+-        .Exited => |code| if (code == 0) return,
+-        else => {
+-            const joined = std.mem.join(server.allocator, " ", argv.items) catch return;
+-            defer server.allocator.free(joined);
+-            log.err("failed zig build command:\n{s}\nstderr:{s}\n\n", .{ joined, result.stderr });
+-        },
++        msg_buffer.clearRetainingCapacity();
++        try tree.renderError(err, msg_buffer.writer(allocator));
++        try notes.append(allocator, try eb.addErrorMessage(.{
++            .msg = try eb.addString(msg_buffer.items),
++            .src_loc = try errorBundleSourceLocationFromToken(tree, eb, err.token),
++        }));
+     }
+ 
+-    var last_diagnostic_uri: ?types.URI = null;
+-    var last_diagnostic: ?types.Diagnostic = null;
+-    // we don't store DiagnosticRelatedInformation in last_diagnostic instead
+-    // its stored in last_related_diagnostics because we need an ArrayList
+-    var last_related_diagnostics: std.ArrayListUnmanaged(types.DiagnosticRelatedInformation) = .{};
++    msg_buffer.clearRetainingCapacity();
++    try tree.renderError(current_error, msg_buffer.writer(allocator));
++    try eb.addRootErrorMessage(.{
++        .msg = try eb.addString(msg_buffer.items),
++        .src_loc = try errorBundleSourceLocationFromToken(tree, eb, current_error.token),
++        .notes_len = @intCast(notes.items.len),
++    });
+ 
+-    // I believe that with color off it's one diag per line; is this correct?
+-    var line_iterator = std.mem.splitScalar(u8, result.stderr, '\n');
++    const notes_start = try eb.reserveNotes(@intCast(notes.items.len));
++    @memcpy(eb.extra.items[notes_start..][0..notes.items.len], @as([]const u32, @ptrCast(notes.items)));
++}
+ 
+-    while (line_iterator.next()) |line| {
+-        var pos_and_diag_iterator = std.mem.splitScalar(u8, line, ':');
++fn errorBundleSourceLocationFromToken(
++    tree: Ast,
++    eb: *std.zig.ErrorBundle.Wip,
++    token: Ast.TokenIndex,
++) error{OutOfMemory}!std.zig.ErrorBundle.SourceLocationIndex {
++    const loc = offsets.tokenToLoc(tree, token);
++    const pos = offsets.indexToPosition(tree.source, loc.start, .@"utf-8");
++    const line = offsets.lineSliceAtIndex(tree.source, loc.start);
++
++    return try eb.addSourceLocation(.{
++        .src_path = try eb.addString(""),
++        .line = pos.line,
++        .column = pos.character,
++        .span_start = @intCast(loc.start),
++        .span_main = @intCast(loc.start),
++        .span_end = @intCast(loc.end),
++        .source_line = try eb.addString(line),
++    });
++}
+ 
+-        const src_path = pos_and_diag_iterator.next() orelse continue;
+-        const absolute_src_path = if (std.fs.path.isAbsolute(src_path)) src_path else blk: {
+-            const absolute_src_path = (if (src_path.len == 1)
+-                // it's a drive letter
+-                std.fs.path.join(arena, &.{ line[0..2], pos_and_diag_iterator.next() orelse continue })
+-            else
+-                std.fs.path.join(arena, &.{ workspace_path, src_path })) catch continue;
+-            if (!std.fs.path.isAbsolute(absolute_src_path)) continue;
+-            break :blk absolute_src_path;
+-        };
++fn collectWarnStyleDiagnostics(
++    tree: Ast,
++    arena: std.mem.Allocator,
++    diagnostics: *std.ArrayListUnmanaged(types.Diagnostic),
++    offset_encoding: offsets.Encoding,
++) error{OutOfMemory}!void {
++    const tracy_zone = tracy.trace(@src());
++    defer tracy_zone.end();
+ 
+-        const src_line = pos_and_diag_iterator.next() orelse continue;
+-        const src_character = pos_and_diag_iterator.next() orelse continue;
++    var node: u32 = 0;
++    while (node < tree.nodes.len) : (node += 1) {
++        if (ast.isBuiltinCall(tree, node)) {
++            const builtin_token = tree.nodes.items(.main_token)[node];
++            const call_name = tree.tokenSlice(builtin_token);
+ 
+-        // TODO zig uses utf-8 encoding for character offsets
+-        // convert them to the desired offset encoding would require loading every file that contains errors
+-        // is there some efficient way to do this?
+-        const utf8_position = types.Position{
+-            .line = (std.fmt.parseInt(u32, src_line, 10) catch continue) -| 1,
+-            .character = std.fmt.parseInt(u32, src_character, 10) catch continue,
+-        };
+-        const range = types.Range{ .start = utf8_position, .end = utf8_position };
++            if (!std.mem.eql(u8, call_name, "@import")) continue;
+ 
+-        const rest = pos_and_diag_iterator.rest();
+-        if (rest.len <= 1) continue;
+-        const msg = rest[1..];
++            var buffer: [2]Ast.Node.Index = undefined;
++            const params = ast.builtinCallParams(tree, node, &buffer).?;
+ 
+-        if (std.mem.startsWith(u8, msg, "note: ")) {
+-            try last_related_diagnostics.append(arena, .{
+-                .location = .{
+-                    .uri = try URI.fromPath(arena, absolute_src_path),
+-                    .range = range,
+-                },
+-                .message = try arena.dupe(u8, msg["note: ".len..]),
+-            });
+-            continue;
+-        }
++            if (params.len != 1) continue;
+ 
+-        if (last_diagnostic) |*diagnostic| {
+-            diagnostic.relatedInformation = try last_related_diagnostics.toOwnedSlice(arena);
+-            const entry = try diagnostics.getOrPutValue(arena, last_diagnostic_uri.?, .{});
+-            try entry.value_ptr.append(arena, diagnostic.*);
+-            last_diagnostic_uri = null;
+-            last_diagnostic = null;
+-        }
++            const import_str_token = tree.nodes.items(.main_token)[params[0]];
++            const import_str = tree.tokenSlice(import_str_token);
+ 
+-        if (std.mem.startsWith(u8, msg, "error: ")) {
+-            last_diagnostic_uri = try URI.fromPath(arena, absolute_src_path);
+-            last_diagnostic = types.Diagnostic{
+-                .range = range,
+-                .severity = .Error,
+-                .code = .{ .string = "zig_build" },
+-                .source = "zls",
+-                .message = try arena.dupe(u8, msg["error: ".len..]),
+-            };
+-        } else {
+-            last_diagnostic_uri = try URI.fromPath(arena, absolute_src_path);
+-            last_diagnostic = types.Diagnostic{
+-                .range = range,
+-                .severity = .Error,
+-                .code = .{ .string = "zig_build" },
+-                .source = "zls",
+-                .message = try arena.dupe(u8, msg),
+-            };
++            if (std.mem.startsWith(u8, import_str, "\"./")) {
++                try diagnostics.append(arena, .{
++                    .range = offsets.tokenToRange(tree, import_str_token, offset_encoding),
++                    .severity = .Hint,
++                    .code = .{ .string = "dot_slash_import" },
++                    .source = "zls",
++                    .message = "A ./ is not needed in imports",
++                });
++            }
+         }
+     }
+ 
+-    if (last_diagnostic) |*diagnostic| {
+-        diagnostic.relatedInformation = try last_related_diagnostics.toOwnedSlice(arena);
+-        const entry = try diagnostics.getOrPutValue(arena, last_diagnostic_uri.?, .{});
+-        try entry.value_ptr.append(arena, diagnostic.*);
+-        last_diagnostic_uri = null;
+-        last_diagnostic = null;
++    // TODO: style warnings for types, values and declarations below root scope
++    if (tree.errors.len == 0) {
++        for (tree.rootDecls()) |decl_idx| {
++            const decl = tree.nodes.items(.tag)[decl_idx];
++            switch (decl) {
++                .fn_proto,
++                .fn_proto_multi,
++                .fn_proto_one,
++                .fn_proto_simple,
++                .fn_decl,
++                => blk: {
++                    var buf: [1]Ast.Node.Index = undefined;
++                    const func = tree.fullFnProto(&buf, decl_idx).?;
++                    if (func.extern_export_inline_token != null) break :blk;
++
++                    if (func.name_token) |name_token| {
++                        const is_type_function = Analyser.isTypeFunction(tree, func);
++
++                        const func_name = tree.tokenSlice(name_token);
++                        if (!is_type_function and !Analyser.isCamelCase(func_name)) {
++                            try diagnostics.append(arena, .{
++                                .range = offsets.tokenToRange(tree, name_token, offset_encoding),
++                                .severity = .Hint,
++                                .code = .{ .string = "bad_style" },
++                                .source = "zls",
++                                .message = "Functions should be camelCase",
++                            });
++                        } else if (is_type_function and !Analyser.isPascalCase(func_name)) {
++                            try diagnostics.append(arena, .{
++                                .range = offsets.tokenToRange(tree, name_token, offset_encoding),
++                                .severity = .Hint,
++                                .code = .{ .string = "bad_style" },
++                                .source = "zls",
++                                .message = "Type functions should be PascalCase",
++                            });
++                        }
++                    }
++                },
++                else => {},
++            }
++        }
+     }
+ }
+ 
+-pub fn getAstCheckDiagnostics(
+-    server: *Server,
++fn collectGlobalVarDiagnostics(
++    tree: Ast,
+     arena: std.mem.Allocator,
+-    handle: *DocumentStore.Handle,
+     diagnostics: *std.ArrayListUnmanaged(types.Diagnostic),
++    offset_encoding: offsets.Encoding,
+ ) error{OutOfMemory}!void {
++    const tracy_zone = tracy.trace(@src());
++    defer tracy_zone.end();
++
++    const main_tokens = tree.nodes.items(.main_token);
++    const tags = tree.tokens.items(.tag);
++    for (tree.rootDecls()) |decl| {
++        const decl_tag = tree.nodes.items(.tag)[decl];
++        const decl_main_token = tree.nodes.items(.main_token)[decl];
++
++        switch (decl_tag) {
++            .simple_var_decl,
++            .aligned_var_decl,
++            .local_var_decl,
++            .global_var_decl,
++            => {
++                if (tags[main_tokens[decl]] != .keyword_var) continue; // skip anything immutable
++                // uncomment this to get a list :)
++                //log.debug("possible global variable \"{s}\"", .{tree.tokenSlice(decl_main_token + 1)});
++                try diagnostics.append(arena, .{
++                    .range = offsets.tokenToRange(tree, decl_main_token, offset_encoding),
++                    .severity = .Hint,
++                    .code = .{ .string = "highlight_global_var_declarations" },
++                    .source = "zls",
++                    .message = "Global var declaration",
++                });
++            },
++            else => {},
++        }
++    }
++}
++
++/// caller owns the returned ErrorBundle
++pub fn getAstCheckDiagnostics(server: *Server, handle: *DocumentStore.Handle) error{OutOfMemory}!std.zig.ErrorBundle {
++    const tracy_zone = tracy.trace(@src());
++    defer tracy_zone.end();
++
+     std.debug.assert(handle.tree.errors.len == 0);
+ 
+-    if (server.config.prefer_ast_check_as_child_process and
+-        std.process.can_spawn and
++    if (std.process.can_spawn and
++        server.config.prefer_ast_check_as_child_process and
++        handle.tree.mode == .zig and // TODO pass `--zon` if available
+         server.config.zig_exe_path != null)
+     {
+-        getDiagnosticsFromAstCheck(server, arena, handle, diagnostics) catch |err| {
++        return getErrorBundleFromAstCheck(
++            server.allocator,
++            server.config.zig_exe_path.?,
++            &server.zig_ast_check_lock,
++            handle.tree.source,
++        ) catch |err| {
+             log.err("failed to run ast-check: {}", .{err});
++            return .empty;
+         };
+-    } else {
+-        try getDiagnosticsFromZir(server, arena, handle, diagnostics);
++    } else switch (handle.tree.mode) {
++        .zig => {
++            const zir = try handle.getZir();
++            if (!zir.hasCompileErrors()) return .empty;
++
++            var eb: std.zig.ErrorBundle.Wip = undefined;
++            try eb.init(server.allocator);
++            defer eb.deinit();
++            try eb.addZirErrorMessages(zir, handle.tree, handle.tree.source, "");
++            return try eb.toOwnedBundle("");
++        },
++        .zon => {
++            const zoir = try handle.getZoir();
++            if (!zoir.hasCompileErrors()) return .empty;
++
++            var eb: std.zig.ErrorBundle.Wip = undefined;
++            try eb.init(server.allocator);
++            defer eb.deinit();
++            try eb.addZoirErrorMessages(zoir, handle.tree, handle.tree.source, "");
++            return try eb.toOwnedBundle("");
++        },
+     }
+ }
+ 
+-fn getDiagnosticsFromAstCheck(
+-    server: *Server,
+-    arena: std.mem.Allocator,
+-    handle: *DocumentStore.Handle,
+-    diagnostics: *std.ArrayListUnmanaged(types.Diagnostic),
+-) !void {
++fn getErrorBundleFromAstCheck(
++    allocator: std.mem.Allocator,
++    zig_exe_path: []const u8,
++    zig_ast_check_lock: *std.Thread.Mutex,
++    source: [:0]const u8,
++) !std.zig.ErrorBundle {
+     comptime std.debug.assert(std.process.can_spawn);
+-    std.debug.assert(server.config.zig_exe_path != null);
+ 
+-    const zig_exe_path = server.config.zig_exe_path.?;
++    var stderr_bytes: []u8 = "";
++    defer allocator.free(stderr_bytes);
+ 
+-    const stderr_bytes = blk: {
+-        server.zig_ast_check_lock.lock();
+-        defer server.zig_ast_check_lock.unlock();
++    {
++        zig_ast_check_lock.lock();
++        defer zig_ast_check_lock.unlock();
+ 
+-        var process = std.process.Child.init(&[_][]const u8{ zig_exe_path, "ast-check", "--color", "off" }, server.allocator);
++        var process: std.process.Child = .init(&.{ zig_exe_path, "ast-check", "--color", "off" }, allocator);
+         process.stdin_behavior = .Pipe;
+         process.stdout_behavior = .Ignore;
+         process.stderr_behavior = .Pipe;
+ 
+         process.spawn() catch |err| {
+             log.warn("Failed to spawn zig ast-check process, error: {}", .{err});
+-            return;
++            return .empty;
+         };
+-        try process.stdin.?.writeAll(handle.tree.source);
++        try process.stdin.?.writeAll(source);
+         process.stdin.?.close();
+ 
+         process.stdin = null;
+ 
+-        const stderr_bytes = try process.stderr.?.readToEndAlloc(server.allocator, std.math.maxInt(usize));
+-        errdefer server.allocator.free(stderr_bytes);
++        stderr_bytes = try process.stderr.?.readToEndAlloc(allocator, 16 * 1024 * 1024);
+ 
+         const term = process.wait() catch |err| {
+             log.warn("Failed to await zig ast-check process, error: {}", .{err});
+-            server.allocator.free(stderr_bytes);
+-            return;
++            return .empty;
+         };
+ 
+-        if (term != .Exited) {
+-            server.allocator.free(stderr_bytes);
+-            return;
+-        }
+-        break :blk stderr_bytes;
+-    };
+-    defer server.allocator.free(stderr_bytes);
++        if (term != .Exited) return .empty;
++    }
+ 
+-    var last_diagnostic: ?types.Diagnostic = null;
+-    // we don't store DiagnosticRelatedInformation in last_diagnostic instead
+-    // its stored in last_related_diagnostics because we need an ArrayList
+-    var last_related_diagnostics: std.ArrayListUnmanaged(types.DiagnosticRelatedInformation) = .{};
++    if (stderr_bytes.len == 0) return .empty;
+ 
+-    // I believe that with color off it's one diag per line; is this correct?
+-    var line_iterator = std.mem.splitScalar(u8, stderr_bytes, '\n');
++    var last_error_message: ?std.zig.ErrorBundle.ErrorMessage = null;
++    var notes: std.ArrayListUnmanaged(std.zig.ErrorBundle.MessageIndex) = .empty;
++    defer notes.deinit(allocator);
++
++    var error_bundle: std.zig.ErrorBundle.Wip = undefined;
++    try error_bundle.init(allocator);
++    defer error_bundle.deinit();
++
++    const eb_file_path = try error_bundle.addString("");
+ 
++    var line_iterator = std.mem.splitScalar(u8, stderr_bytes, '\n');
+     while (line_iterator.next()) |line| {
+         var pos_and_diag_iterator = std.mem.splitScalar(u8, line, ':');
+ 
+-        const first = pos_and_diag_iterator.next() orelse continue;
+-        if (!std.mem.eql(u8, first, "<stdin>")) continue;
++        const src_path = pos_and_diag_iterator.next() orelse continue;
++        const line_string = pos_and_diag_iterator.next() orelse continue;
++        const column_string = pos_and_diag_iterator.next() orelse continue;
++        const msg = pos_and_diag_iterator.rest();
+ 
+-        const utf8_position = types.Position{
+-            .line = (std.fmt.parseInt(u32, pos_and_diag_iterator.next() orelse continue, 10) catch continue) -| 1,
+-            .character = (std.fmt.parseInt(u32, pos_and_diag_iterator.next() orelse continue, 10) catch continue) -| 1,
+-        };
++        if (!std.mem.eql(u8, src_path, "<stdin>")) continue;
+ 
+         // zig uses utf-8 encoding for character offsets
+-        const position = offsets.convertPositionEncoding(handle.tree.source, utf8_position, .@"utf-8", server.offset_encoding);
+-        const range = offsets.tokenPositionToRange(handle.tree.source, position, server.offset_encoding);
+-
+-        const rest = pos_and_diag_iterator.rest();
+-        if (rest.len <= 1) continue;
+-        const msg = rest[1..];
+-
+-        if (std.mem.startsWith(u8, msg, "note: ")) {
+-            try last_related_diagnostics.append(arena, .{
+-                .location = .{
+-                    .uri = handle.uri,
+-                    .range = range,
+-                },
+-                .message = try arena.dupe(u8, msg["note: ".len..]),
+-            });
+-            continue;
++        const utf8_position: types.Position = .{
++            .line = (std.fmt.parseInt(u32, line_string, 10) catch continue) -| 1,
++            .character = (std.fmt.parseInt(u32, column_string, 10) catch continue) -| 1,
++        };
++        const source_index = offsets.positionToIndex(source, utf8_position, .@"utf-8");
++        const source_line = offsets.lineSliceAtIndex(source, source_index);
++
++        var loc: offsets.Loc = .{ .start = source_index, .end = source_index };
++
++        while (loc.end < source.len and Analyser.isSymbolChar(source[loc.end])) {
++            loc.end += 1;
+         }
+ 
+-        if (last_diagnostic) |*diagnostic| {
+-            diagnostic.relatedInformation = try last_related_diagnostics.toOwnedSlice(arena);
+-            try diagnostics.append(arena, diagnostic.*);
+-            last_diagnostic = null;
++        const src_loc = try error_bundle.addSourceLocation(.{
++            .src_path = eb_file_path,
++            .line = utf8_position.line,
++            .column = utf8_position.character,
++            .span_start = @intCast(loc.start),
++            .span_main = @intCast(source_index),
++            .span_end = @intCast(loc.end),
++            .source_line = try error_bundle.addString(source_line),
++        });
++
++        if (std.mem.startsWith(u8, msg, " note: ")) {
++            try notes.append(allocator, try error_bundle.addErrorMessage(.{
++                .msg = try error_bundle.addString(msg[" note: ".len..]),
++                .src_loc = src_loc,
++            }));
++            continue;
+         }
+ 
+-        if (std.mem.startsWith(u8, msg, "error: ")) {
+-            last_diagnostic = types.Diagnostic{
+-                .range = range,
+-                .severity = .Error,
+-                .code = .{ .string = "ast_check" },
+-                .source = "zls",
+-                .message = try arena.dupe(u8, msg["error: ".len..]),
+-            };
+-        } else {
+-            last_diagnostic = types.Diagnostic{
+-                .range = range,
+-                .severity = .Error,
+-                .code = .{ .string = "ast_check" },
+-                .source = "zls",
+-                .message = try arena.dupe(u8, msg),
+-            };
++        const message = if (std.mem.startsWith(u8, msg, " error: ")) msg[" error: ".len..] else msg;
++
++        if (last_error_message) |*em| {
++            em.notes_len = @intCast(notes.items.len);
++            try error_bundle.addRootErrorMessage(em.*);
++            const notes_start = try error_bundle.reserveNotes(em.notes_len);
++            @memcpy(error_bundle.extra.items[notes_start..][0..em.notes_len], @as([]const u32, @ptrCast(notes.items)));
++
++            notes.clearRetainingCapacity();
++            last_error_message = null;
+         }
++
++        last_error_message = .{
++            .msg = try error_bundle.addString(message),
++            .src_loc = src_loc,
++            .notes_len = undefined, // set later
++        };
+     }
+ 
+-    if (last_diagnostic) |*diagnostic| {
+-        diagnostic.relatedInformation = try last_related_diagnostics.toOwnedSlice(arena);
+-        try diagnostics.append(arena, diagnostic.*);
+-        last_diagnostic = null;
++    if (last_error_message) |*em| {
++        em.notes_len = @intCast(notes.items.len);
++        try error_bundle.addRootErrorMessage(em.*);
++        const notes_start = try error_bundle.reserveNotes(em.notes_len);
++        @memcpy(error_bundle.extra.items[notes_start..][0..em.notes_len], @as([]const u32, @ptrCast(notes.items)));
+     }
++
++    return try error_bundle.toOwnedBundle("");
+ }
+ 
+-fn getDiagnosticsFromZir(
+-    server: *const Server,
+-    arena: std.mem.Allocator,
+-    handle: *DocumentStore.Handle,
+-    diagnostics: *std.ArrayListUnmanaged(types.Diagnostic),
+-) error{OutOfMemory}!void {
+-    const tree = handle.tree;
+-    std.debug.assert(tree.errors.len == 0);
+-    const zir = try handle.getZir();
+-    std.debug.assert(handle.getZirStatus() == .done);
+-
+-    const payload_index = zir.extra[@intFromEnum(Zir.ExtraIndex.compile_errors)];
+-    if (payload_index == 0) return;
+-
+-    const header = zir.extraData(Zir.Inst.CompileErrors, payload_index);
+-    const items_len = header.data.items_len;
+-
+-    try diagnostics.ensureUnusedCapacity(arena, items_len);
+-
+-    var extra_index = header.end;
+-    for (0..items_len) |_| {
+-        const item = zir.extraData(Zir.Inst.CompileErrors.Item, extra_index);
+-        extra_index = item.end;
+-        const err_loc = blk: {
+-            if (item.data.node != 0) {
+-                break :blk offsets.nodeToLoc(tree, item.data.node);
+-            }
+-            const loc = offsets.tokenToLoc(tree, item.data.token);
+-            break :blk offsets.Loc{
+-                .start = loc.start + item.data.byte_offset,
+-                .end = loc.end,
+-            };
++pub const BuildOnSave = struct {
++    allocator: std.mem.Allocator,
++    child_process: *std.process.Child,
++    thread: std.Thread,
++
++    const shared = @import("../build_runner/shared.zig");
++    const Transport = shared.Transport;
++    const ServerToClient = shared.ServerToClient;
++
++    pub const InitOptions = struct {
++        allocator: std.mem.Allocator,
++        workspace_path: []const u8,
++        build_on_save_args: []const []const u8,
++        check_step_only: bool,
++        zig_exe_path: []const u8,
++        zig_lib_path: []const u8,
++        build_runner_path: []const u8,
++
++        collection: *DiagnosticsCollection,
++    };
++
++    pub fn init(options: InitOptions) !?BuildOnSave {
++        const child_process = try options.allocator.create(std.process.Child);
++        errdefer options.allocator.destroy(child_process);
++
++        const base_args: []const []const u8 = &.{
++            options.zig_exe_path,
++            "build",
++            "--build-runner",
++            options.build_runner_path,
++            "--zig-lib-dir",
++            options.zig_lib_path,
++            "--watch",
++        };
++        var argv: std.ArrayListUnmanaged([]const u8) = try .initCapacity(
++            options.allocator,
++            base_args.len + options.build_on_save_args.len + @intFromBool(options.check_step_only),
++        );
++        defer argv.deinit(options.allocator);
++
++        argv.appendSliceAssumeCapacity(base_args);
++        if (options.check_step_only) argv.appendAssumeCapacity("--check-only");
++        argv.appendSliceAssumeCapacity(options.build_on_save_args);
++
++        child_process.* = .init(argv.items, options.allocator);
++        child_process.stdin_behavior = .Pipe;
++        child_process.stdout_behavior = .Pipe;
++        child_process.stderr_behavior = .Pipe;
++        child_process.cwd = options.workspace_path;
++
++        child_process.spawn() catch |err| {
++            options.allocator.destroy(child_process);
++            log.err("failed to spawn zig build process: {}", .{err});
++            return null;
+         };
+ 
+-        var notes: []types.DiagnosticRelatedInformation = &.{};
+-        if (item.data.notes != 0) {
+-            const block = zir.extraData(Zir.Inst.Block, item.data.notes);
+-            const body = zir.extra[block.end..][0..block.data.body_len];
+-            notes = try arena.alloc(types.DiagnosticRelatedInformation, body.len);
+-            for (notes, body) |*note, note_index| {
+-                const note_item = zir.extraData(Zir.Inst.CompileErrors.Item, note_index);
+-                const msg = zir.nullTerminatedString(note_item.data.msg);
+-
+-                const loc = blk: {
+-                    if (note_item.data.node != 0) {
+-                        break :blk offsets.nodeToLoc(tree, note_item.data.node);
+-                    }
+-                    const loc = offsets.tokenToLoc(tree, note_item.data.token);
+-                    break :blk offsets.Loc{
+-                        .start = loc.start + note_item.data.byte_offset,
+-                        .end = loc.end,
++        errdefer {
++            _ = terminateChildProcessReportError(
++                child_process,
++                options.allocator,
++                "zig build runner",
++                .kill,
++            );
++        }
++
++        const duped_workspace_path = try options.allocator.dupe(u8, options.workspace_path);
++        errdefer options.allocator.free(duped_workspace_path);
++
++        const thread = try std.Thread.spawn(.{ .allocator = options.allocator }, loop, .{
++            options.allocator,
++            child_process,
++            options.collection,
++            duped_workspace_path,
++        });
++        errdefer comptime unreachable;
++
++        return .{
++            .allocator = options.allocator,
++            .child_process = child_process,
++            .thread = thread,
++        };
++    }
++
++    pub fn deinit(self: *BuildOnSave) void {
++        defer self.* = undefined;
++        defer self.allocator.destroy(self.child_process);
++
++        self.child_process.stdin.?.close();
++        self.child_process.stdin = null;
++
++        const success = terminateChildProcessReportError(
++            self.child_process,
++            self.allocator,
++            "zig build runner",
++            .wait,
++        );
++        if (!success) return;
++
++        self.thread.join();
++    }
++
++    pub fn sendManualWatchUpdate(self: *BuildOnSave) void {
++        self.child_process.stdin.?.writeAll("\x00") catch {};
++    }
++
++    fn loop(
++        allocator: std.mem.Allocator,
++        child_process: *std.process.Child,
++        collection: *DiagnosticsCollection,
++        workspace_path: []const u8,
++    ) void {
++        defer allocator.free(workspace_path);
++
++        var transport: Transport = .init(.{
++            .gpa = allocator,
++            .in = child_process.stdout.?,
++            .out = child_process.stdin.?,
++        });
++        defer transport.deinit();
++
++        var diagnostic_tags: std.AutoArrayHashMapUnmanaged(DiagnosticsCollection.Tag, void) = .empty;
++        defer diagnostic_tags.deinit(allocator);
++
++        defer {
++            for (diagnostic_tags.keys()) |tag| collection.clearErrorBundle(tag);
++            collection.publishDiagnostics() catch {};
++        }
++
++        while (true) {
++            const header = transport.receiveMessage(null) catch |err| switch (err) {
++                error.EndOfStream => {
++                    log.debug("zig build runner process has exited", .{});
++                    return;
++                },
++                else => {
++                    log.err("failed to receive message from zig build runner: {}", .{err});
++                    return;
++                },
++            };
++
++            switch (@as(ServerToClient.Tag, @enumFromInt(header.tag))) {
++                .watch_error_bundle => {
++                    handleWatchErrorBundle(
++                        allocator,
++                        &transport,
++                        collection,
++                        workspace_path,
++                        &diagnostic_tags,
++                    ) catch |err| {
++                        log.err("failed to handle error bundle message from zig build runner: {}", .{err});
++                        return;
+                     };
+-                };
+-
+-                note.* = .{
+-                    .location = .{
+-                        .uri = handle.uri,
+-                        .range = offsets.locToRange(handle.tree.source, loc, server.offset_encoding),
+-                    },
+-                    .message = msg,
+-                };
++                },
++                else => |tag| {
++                    log.warn("received unexpected message from zig build runner: {}", .{tag});
++                },
+             }
+         }
++    }
+ 
+-        const msg = zir.nullTerminatedString(item.data.msg);
+-        diagnostics.appendAssumeCapacity(.{
+-            .range = offsets.locToRange(handle.tree.source, err_loc, server.offset_encoding),
+-            .severity = .Error,
+-            .code = .{ .string = "ast_check" },
+-            .source = "zls",
+-            .message = msg,
+-            .relatedInformation = if (notes.len != 0) notes else null,
+-        });
++    fn handleWatchErrorBundle(
++        allocator: std.mem.Allocator,
++        transport: *Transport,
++        collection: *DiagnosticsCollection,
++        workspace_path: []const u8,
++        diagnostic_tags: *std.AutoArrayHashMapUnmanaged(DiagnosticsCollection.Tag, void),
++    ) !void {
++        const header = try transport.reader().readStructEndian(ServerToClient.ErrorBundle, .little);
++
++        const extra = try transport.receiveSlice(allocator, u32, header.extra_len);
++        defer allocator.free(extra);
++
++        const string_bytes = try transport.receiveBytes(allocator, header.string_bytes_len);
++        defer allocator.free(string_bytes);
++
++        const error_bundle: std.zig.ErrorBundle = .{ .string_bytes = string_bytes, .extra = extra };
++
++        var hasher: std.hash.Wyhash = .init(0);
++        hasher.update(workspace_path);
++        std.hash.autoHash(&hasher, header.step_id);
++
++        const diagnostic_tag: DiagnosticsCollection.Tag = @enumFromInt(@as(u32, @truncate(hasher.final())));
++
++        try diagnostic_tags.put(allocator, diagnostic_tag, {});
++
++        try collection.pushErrorBundle(diagnostic_tag, header.cycle, workspace_path, error_bundle);
++        try collection.publishDiagnostics();
+     }
++};
++
++fn terminateChildProcessReportError(
++    child_process: *std.process.Child,
++    allocator: std.mem.Allocator,
++    name: []const u8,
++    kind: enum { wait, kill },
++) bool {
++    const stderr = if (child_process.stderr) |stderr|
++        stderr.readToEndAlloc(allocator, 16 * 1024 * 1024) catch ""
++    else
++        "";
++    defer allocator.free(stderr);
++
++    const term = (switch (kind) {
++        .wait => child_process.wait(),
++        .kill => child_process.kill(),
++    }) catch |err| {
++        log.warn("Failed to await {s}: {}", .{ name, err });
++        return false;
++    };
++
++    switch (term) {
++        .Exited => |code| if (code != 0) {
++            if (stderr.len != 0) {
++                log.warn("{s} exited with non-zero status: {}\nstderr:\n{s}", .{ name, code, stderr });
++            } else {
++                log.warn("{s} exited with non-zero status: {}", .{ name, code });
++            }
++        },
++        else => {
++            if (stderr.len != 0) {
++                log.warn("{s} exitied abnormally: {s}\nstderr:\n{s}", .{ name, @tagName(term), stderr });
++            } else {
++                log.warn("{s} exitied abnormally: {s}", .{ name, @tagName(term) });
++            }
++        },
++    }
++
++    return true;
+ }
+diff --git a/tests/lsp_features/code_actions.zig b/tests/lsp_features/code_actions.zig
+index 4293d6d7..4119043d 100644
+--- a/tests/lsp_features/code_actions.zig
++++ b/tests/lsp_features/code_actions.zig
+@@ -2,6 +2,7 @@ const std = @import("std");
+ const zls = @import("zls");
+ 
+ const Context = @import("../context.zig").Context;
++const helper = @import("../helper.zig");
+ 
+ const types = zls.types;
+ const offsets = zls.offsets;
+@@ -363,30 +364,528 @@ test "ignore autofix comment whitespace" {
+     );
+ }
+ 
++test "remove function parameter" {
++    try testDiagnostic(
++        \\fn foo(alpha: u32) void {}
++    ,
++        \\fn foo() void {}
++    , .{ .filter_title = "remove function parameter" });
++    try testDiagnostic(
++        \\fn foo(
++        \\    alpha: u32,
++        \\) void {}
++    ,
++        \\fn foo() void {}
++    , .{ .filter_title = "remove function parameter" });
++}
++
++test "variable never mutated" {
++    try testDiagnostic(
++        \\test {
++        \\    var foo = 5;
++        \\    _ = foo;
++        \\}
++    ,
++        \\test {
++        \\    const foo = 5;
++        \\    _ = foo;
++        \\}
++    , .{ .filter_title = "use 'const'" });
++}
++
++test "discard capture name" {
++    try testDiagnostic(
++        \\test {
++        \\    const maybe: ?u32 = 5;
++        \\    if (maybe) |value| {}
++        \\}
++    ,
++        \\test {
++        \\    const maybe: ?u32 = 5;
++        \\    if (maybe) |_| {}
++        \\}
++    , .{ .filter_title = "discard capture name" });
++}
++
++test "remove capture" {
++    // TODO fix whitespace
++    try testDiagnostic(
++        \\test {
++        \\    const maybe: ?u32 = 5;
++        \\    if (maybe) |value| {}
++        \\}
++    ,
++        \\test {
++        \\    const maybe: ?u32 = 5;
++        \\    if (maybe)  {}
++        \\}
++    , .{ .filter_title = "remove capture" });
++}
++
++test "organize imports" {
++    try testOrganizeImports(
++        \\const xyz = @import("xyz.zig");
++        \\const abc = @import("abc.zig");
++    ,
++        \\const abc = @import("abc.zig");
++        \\const xyz = @import("xyz.zig");
++        \\
++        \\
++    );
++    // Three different import groups: std, build_options and builtin, but these groups do not have separator
++    // Builtin comes before build_options despite alphabetical order (they are different import kinds)
++    // Case insensitive, pub is preserved
++    try testOrganizeImports(
++        \\const std = @import("std");
++        \\const abc = @import("abc.zig");
++        \\const build_options = @import("build_options");
++        \\const builtin = @import("builtin");
++        \\const tres = @import("tres");
++        \\
++        \\pub const offsets = @import("offsets.zig");
++        \\const Config = @import("Config.zig");
++        \\const debug = @import("debug.zig");
++        \\const Server = @import("Server.zig");
++        \\const root = @import("root");
++    ,
++        \\const std = @import("std");
++        \\const builtin = @import("builtin");
++        \\const root = @import("root");
++        \\const build_options = @import("build_options");
++        \\
++        \\const tres = @import("tres");
++        \\
++        \\const abc = @import("abc.zig");
++        \\const Config = @import("Config.zig");
++        \\const debug = @import("debug.zig");
++        \\pub const offsets = @import("offsets.zig");
++        \\const Server = @import("Server.zig");
++        \\
++        \\
++    );
++    // Relative paths are sorted by import path
++    try testOrganizeImports(
++        \\const y = @import("a/file2.zig");
++        \\const x = @import("a/file3.zig");
++        \\const z = @import("a/file1.zig");
++    ,
++        \\const z = @import("a/file1.zig");
++        \\const y = @import("a/file2.zig");
++        \\const x = @import("a/file3.zig");
++        \\
++        \\
++    );
++}
++
++test "organize imports - bubbles up" {
++    try testOrganizeImports(
++        \\const std = @import("std");
++        \\fn main() void {}
++        \\const abc = @import("abc.zig");
++    ,
++        \\const std = @import("std");
++        \\
++        \\const abc = @import("abc.zig");
++        \\
++        \\fn main() void {}
++        \\
++    );
++}
++
++test "organize imports - scope" {
++    // Ignore imports not in root scope
++    try testOrganizeImports(
++        \\const b = @import("a.zig");
++        \\const a = @import("b.zig");
++        \\fn main() void {
++        \\  const y = @import("y");
++        \\  const x = @import("x");
++        \\  _ = y; // autofix
++        \\  _ = x; // autofix
++        \\}
++    ,
++        \\const a = @import("b.zig");
++        \\const b = @import("a.zig");
++        \\
++        \\fn main() void {
++        \\  const y = @import("y");
++        \\  const x = @import("x");
++        \\  _ = y; // autofix
++        \\  _ = x; // autofix
++        \\}
++    );
++}
++
++test "organize imports - comments" {
++    // Doc comments are preserved
++    try testOrganizeImports(
++        \\const xyz = @import("xyz.zig");
++        \\/// Do not look inside
++        \\const abc = @import("abc.zig");
++    ,
++        \\/// Do not look inside
++        \\const abc = @import("abc.zig");
++        \\const xyz = @import("xyz.zig");
++        \\
++        \\
++    );
++    // Respects top-level doc-comment
++    try testOrganizeImports(
++        \\//! A module doc
++        \\//! Another line
++        \\
++        \\const abc = @import("abc.zig");
++        \\const std = @import("std");
++    ,
++        \\//! A module doc
++        \\//! Another line
++        \\
++        \\const std = @import("std");
++        \\
++        \\const abc = @import("abc.zig");
++        \\
++        \\
++    );
++}
++
++test "organize imports - field access" {
++    // field access on import
++    try testOrganizeImports(
++        \\const xyz = @import("xyz.zig").a.long.chain;
++        \\const abc = @import("abc.zig");
++    ,
++        \\const abc = @import("abc.zig");
++        \\const xyz = @import("xyz.zig").a.long.chain;
++        \\
++        \\
++    );
++    // declarations without @import move under the parent import
++    try testOrganizeImports(
++        \\const xyz = @import("xyz.zig").a.long.chain;
++        \\const abc = @import("abc.zig");
++        \\const abc_related = abc.related;
++    ,
++        \\const abc = @import("abc.zig");
++        \\const abc_related = abc.related;
++        \\const xyz = @import("xyz.zig").a.long.chain;
++        \\
++        \\
++    );
++    try testOrganizeImports(
++        \\const std = @import("std");
++        \\const builtin = @import("builtin");
++        \\
++        \\const mem = std.mem;
++    ,
++        \\const std = @import("std");
++        \\const mem = std.mem;
++        \\const builtin = @import("builtin");
++        \\
++        \\
++    );
++    // Inverse chain of parents
++    try testOrganizeImports(
++        \\const abc = @import("abc.zig");
++        \\const isLower = ascii.isLower;
++        \\const ascii = std.ascii;
++        \\const std = @import("std");
++    ,
++        \\const std = @import("std");
++        \\const ascii = std.ascii;
++        \\const isLower = ascii.isLower;
++        \\
++        \\const abc = @import("abc.zig");
++        \\
++        \\
++    );
++    // Parent chains are not mixed
++    try testOrganizeImports(
++        \\const xyz = @import("xyz.zig");
++        \\const abc = @import("abc.zig");
++        \\const xyz_related = xyz.related;
++        \\/// comment
++        \\const abc_related = abc.related;
++    ,
++        \\const abc = @import("abc.zig");
++        \\/// comment
++        \\const abc_related = abc.related;
++        \\const xyz = @import("xyz.zig");
++        \\const xyz_related = xyz.related;
++        \\
++        \\
++    );
++}
++
++test "organize imports - @embedFile" {
++    try testOrganizeImports(
++        \\const foo = @embedFile("foo.zig");
++        \\const abc = @import("abc.zig");
++    ,
++        \\const abc = @import("abc.zig");
++        \\
++        \\const foo = @embedFile("foo.zig");
++        \\
++    );
++}
++
++test "organize imports - edge cases" {
++    // Withstands non-standard behavior
++    try testOrganizeImports(
++        \\const std = @import("std");
++        \\const abc = @import("abc.zig");
++        \\const std = @import("std");
++    ,
++        \\const std = @import("std");
++        \\const std = @import("std");
++        \\
++        \\const abc = @import("abc.zig");
++        \\
++        \\
++    );
++}
++
++test "convert multiline string literal" {
++    try testConvertString(
++        \\const foo = \\Hell<cursor>o
++        \\            \\World
++        \\;
++    ,
++        \\const foo = "Hello\nWorld";
++    );
++    // Empty
++    try testConvertString(
++        \\const foo = \\<cursor>
++        \\;
++    ,
++        \\const foo = "";
++    );
++    // Multi-byte characters
++    try testConvertString(
++        \\const foo = \\He😂ll<cursor>o
++        \\            \\Wo🤓rld
++        \\;
++    ,
++        \\const foo = "He😂llo\nWo🤓rld";
++    );
++    // Quotes
++    try testConvertString(
++        \\const foo = \\The<cursor> "cure"
++        \\;
++    ,
++        \\const foo = "The \"cure\"";
++    );
++    try testConvertString(
++        \\const foo = \\<cursor>\x49 \u{0033}
++        \\            \\\n'
++        \\            \\
++        \\;
++    ,
++        \\const foo = "\\x49 \\u{0033}\n\\n'\n";
++    );
++    // The control characters TAB and CR are rejected by the grammar inside multi-line string literals,
++    // except if CR is directly before NL.
++    try testConvertString( // (force format)
++        "const foo = \\\\<cursor>Hello\r\n;",
++        \\const foo = "Hello";
++    );
++}
++
++test "convert string literal to multiline" {
++    try testConvertString(
++        \\const foo = "He<cursor>llo\nWorld";
++    ,
++        \\const foo = \\Hello
++        \\    \\World
++        \\;
++    );
++    // Empty
++    try testConvertString(
++        \\const foo = "<cursor>";
++    ,
++        \\const foo = \\
++        \\;
++    );
++    // In function
++    try testConvertString(
++        \\const x = foo("<cursor>bar\nbaz");
++    ,
++        \\const x = foo(\\bar
++        \\    \\baz
++        \\);
++    );
++}
++
++test "convert string literal to multiline - cursor outside of string literal" {
++    try testConvertString(
++        \\const foo = <cursor> "hello";
++    ,
++        \\const foo =  "hello";
++    );
++    try testConvertString(
++        \\const foo = <cursor>"hello";
++    ,
++        \\const foo = \\hello
++        \\;
++    );
++    try testConvertString(
++        \\const foo = "hello"<cursor>;
++    ,
++        \\const foo = \\hello
++        \\;
++    );
++    // TODO
++    // try testConvertString(
++    //     \\const foo = "hello" <cursor>;
++    // ,
++    //     \\const foo = "hello" <cursor>;
++    // );
++}
++
++test "convert string literal to multiline - escapes" {
++    // Hex escapes
++    try testConvertString(
++        \\const foo = "<cursor>\x41\x42\x43";
++    ,
++        \\const foo = \\ABC
++        \\;
++    );
++    // Hex escapes that form a unicode character in utf-8
++    try testConvertString(
++        \\const foo = "<cursor>\xE2\x9C\x85";
++    ,
++        \\const foo = \\✅
++        \\;
++    );
++    // Newlines
++    try testConvertString(
++        \\const foo = "<cursor>\nhello\n\n";
++    ,
++        \\const foo = \\
++        \\    \\hello
++        \\    \\
++        \\    \\
++        \\;
++    );
++    // Quotes and slashes
++    try testConvertString(
++        \\const foo = "<cursor>A slash: \'\\\'";
++    ,
++        \\const foo = \\A slash: '\'
++        \\;
++    );
++    // Unicode
++    try testConvertString(
++        \\const foo = "<cursor>Smile: \u{1F913}";
++    ,
++        \\const foo = \\Smile: 🤓
++        \\;
++    );
++}
++
++test "convert string literal to multiline - invalid" {
++    // Invalid unicode
++    try testConvertString(
++        \\const foo = "<cursor>Smile: \u{1F9131}";
++    ,
++        \\const foo = "Smile: \u{1F9131}";
++    );
++    // Invalid utf-8
++    try testConvertString(
++        \\const foo = "<cursor>\xaa";
++    ,
++        \\const foo = "\xaa";
++    );
++    // Hex escaped unprintable character
++    try testConvertString(
++        \\const foo = "<cursor>\x7f";
++    ,
++        \\const foo = "\x7f";
++    );
++    // Tabs are invalid too
++    try testConvertString(
++        \\const foo = "<cursor>\tWe use tabs";
++    ,
++        \\const foo = "\tWe use tabs";
++    );
++    // A Multi-Line String Literals can't contain carriage returns
++    try testConvertString(
++        \\const foo = "<cursor>\r";
++    ,
++        \\const foo = "\r";
++    );
++    // Not in @import
++    try testConvertString(
++        \\const std = @import("<cursor>std");
++    ,
++        \\const std = @import("std");
++    );
++    // Not in test
++    try testConvertString(
++        \\test "<cursor>addition" { }
++    ,
++        \\test "addition" { }
++    );
++    // Not in extern
++    try testConvertString(
++        \\pub extern "<cursor>c" fn printf(format: [*:0]const u8) c_int;
++    ,
++        \\pub extern "c" fn printf(format: [*:0]const u8) c_int;
++    );
++}
++
+ fn testAutofix(before: []const u8, after: []const u8) !void {
+-    try testAutofixOptions(before, after, true); // diagnostics come from our AstGen fork
+-    try testAutofixOptions(before, after, false); // diagnostics come from calling zig ast-check
++    try testDiagnostic(before, after, .{ .filter_kind = .@"source.fixAll", .want_zir = true }); // diagnostics come from std.zig.AstGen
++    try testDiagnostic(before, after, .{ .filter_kind = .@"source.fixAll", .want_zir = false }); // diagnostics come from calling zig ast-check
+ }
+ 
+-fn testAutofixOptions(before: []const u8, after: []const u8, want_zir: bool) !void {
+-    var ctx = try Context.init();
+-    defer ctx.deinit();
+-    ctx.server.config.enable_autofix = true;
+-    ctx.server.config.prefer_ast_check_as_child_process = !want_zir;
++fn testOrganizeImports(before: []const u8, after: []const u8) !void {
++    try testDiagnostic(before, after, .{ .filter_kind = .@"source.organizeImports" });
++}
+ 
+-    const uri = try ctx.addDocument(before);
+-    const handle = ctx.server.document_store.getHandle(uri).?;
++fn testConvertString(before: []const u8, after: []const u8) !void {
++    try testDiagnostic(before, after, .{ .filter_kind = types.CodeActionKind.refactor });
++}
++
++fn testDiagnostic(
++    before: []const u8,
++    after: []const u8,
++    options: struct {
++        filter_kind: ?types.CodeActionKind = null,
++        filter_title: ?[]const u8 = null,
++        want_zir: bool = true,
++    },
++) !void {
++    var ctx: Context = try .init();
++    defer ctx.deinit();
++    ctx.server.config.prefer_ast_check_as_child_process = !options.want_zir;
+ 
+-    var diagnostics: std.ArrayListUnmanaged(types.Diagnostic) = .{};
+-    try zls.diagnostics.getAstCheckDiagnostics(ctx.server, ctx.arena.allocator(), handle, &diagnostics);
++    var phr = try helper.collectClearPlaceholders(allocator, before);
++    defer phr.deinit(allocator);
++    const placeholders = phr.locations.items(.new);
++    const source = phr.new_source;
+ 
+-    const params = types.CodeActionParams{
+-        .textDocument = .{ .uri = uri },
+-        .range = .{
++    const range: types.Range = switch (placeholders.len) {
++        0 => .{
+             .start = .{ .line = 0, .character = 0 },
+             .end = offsets.indexToPosition(before, before.len, ctx.server.offset_encoding),
+         },
+-        .context = .{ .diagnostics = diagnostics.items },
++        1 => blk: {
++            const point = offsets.indexToPosition(before, placeholders[0].start, ctx.server.offset_encoding);
++            break :blk .{ .start = point, .end = point };
++        },
++        else => unreachable,
++    };
++
++    const uri = try ctx.addDocument(.{ .source = source });
++    const handle = ctx.server.document_store.getHandle(uri).?;
++
++    const params: types.CodeActionParams = .{
++        .textDocument = .{ .uri = uri },
++        .range = range,
++        .context = .{
++            .diagnostics = &.{},
++            .only = if (options.filter_kind) |kind| &.{kind} else null,
++        },
+     };
+ 
+     @setEvalBranchQuota(5000);
+@@ -395,12 +894,20 @@ fn testAutofixOptions(before: []const u8, after: []const u8, want_zir: bool) !vo
+         return error.InvalidResponse;
+     };
+ 
+-    var text_edits: std.ArrayListUnmanaged(types.TextEdit) = .{};
++    var text_edits: std.ArrayListUnmanaged(types.TextEdit) = .empty;
+     defer text_edits.deinit(allocator);
+ 
+     for (response) |action| {
+-        const code_action = action.CodeAction;
+-        if (code_action.kind.? != .@"source.fixAll") continue;
++        const code_action: types.CodeAction = action.CodeAction;
++
++        if (options.filter_kind) |kind| {
++            // check that `types.CodeActionContext.only` is being respected
++            try std.testing.expectEqual(code_action.kind.?, kind);
++        }
++        if (options.filter_title) |title| {
++            if (!std.mem.eql(u8, title, code_action.title)) continue;
++        }
++
+         const workspace_edit = code_action.edit.?;
+         const changes = workspace_edit.changes.?.map;
+         try std.testing.expectEqual(@as(usize, 1), changes.count());
+@@ -409,7 +916,7 @@ fn testAutofixOptions(before: []const u8, after: []const u8, want_zir: bool) !vo
+         try text_edits.appendSlice(allocator, changes.get(uri).?);
+     }
+ 
+-    const actual = try zls.diff.applyTextEdits(allocator, before, text_edits.items, ctx.server.offset_encoding);
++    const actual = try zls.diff.applyTextEdits(allocator, source, text_edits.items, ctx.server.offset_encoding);
+     defer allocator.free(actual);
+     try ctx.server.document_store.refreshDocument(uri, try allocator.dupeZ(u8, actual));
+ 
